@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  image         String?
+  email         String?        @unique
+  emailVerified DateTime?      @map("email_verified")
+  password      String?
+  isPremium     Boolean        @default(false)
+  role          Role           @default(USER)
+  accounts      Account[]
+  clothes       Clothes[]
+  refreshTokens RefreshToken[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Account {
+  userId            String  @map("user_id")
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refreshToken      String? @map("refresh_token") @db.Text
+  accessToken       String? @map("access_token") @db.Text
+  expiresAt         Int?    @map("expires_at")
+  tokenType         String? @map("token_type")
+  scope             String?
+  idToken           String? @map("id_token") @db.Text
+  sessionState      String? @map("session_state")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model RefreshToken {
+  id        String @id @default(cuid())
+  userId    String @map("user_id")
+  tokenHash String @unique @map("token_hash")
+  familyId  String @map("family_id")
+
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model Clothes {
+  id     String  @id @default(cuid())
+  userId String  @map("user_id")
+  name   String
+  image  String?
+  type   String
+
+  colors     Colors[]
+  categories Categories[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("clothes")
+}
+
+model Colors {
+  id         String @id @default(cuid())
+  clothesId  String @map("clothes_id")
+  colorId    String @map("color_id")
+  color      String
+  percentage Int
+
+  clothes Clothes @relation(fields: [clothesId], references: [id], onDelete: Cascade)
+
+  @@index([clothesId])
+  @@map("colors")
+}
+
+model Categories {
+  clothesId String @map("clothes_id")
+  category  String
+
+  clothes Clothes @relation(fields: [clothesId], references: [id], onDelete: Cascade)
+
+  @@id([clothesId, category])
+  @@index([clothesId])
+  @@map("categories")
+}
