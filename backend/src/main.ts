@@ -22,8 +22,8 @@ async function bootstrap() {
 
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
-      .setTitle('Pesticide API')
-      .setDescription('Pesticide API 문서입니다.')
+      .setTitle('SWYP-app5-7team API')
+      .setDescription('스위프 앱 5기 7팀 API 문서입니다.')
       .setVersion('1.0')
       .addBearerAuth(
         {
