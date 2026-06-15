@@ -9,11 +9,13 @@ async function bootstrap() {
 
   app.use(
     helmet({
+      // 개발 환경에서는 Swagger UI가 정상 렌더링되도록 CSP만 비활성화한다.
       contentSecurityPolicy:
         process.env.NODE_ENV === 'production' ? undefined : false,
     }),
   );
 
+  // 운영 환경에서는 등록된 프론트엔드 도메인만 허용하고, 개발 환경에서는 로컬 테스트를 열어둔다.
   app.enableCors({
     origin:
       process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : true,
@@ -44,6 +46,7 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
+      // DTO에 선언되지 않은 값은 제거하고, 알 수 없는 필드는 요청 오류로 처리한다.
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
