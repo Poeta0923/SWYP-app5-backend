@@ -1,11 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // 로거 준비 전 발생하는 시작 로그가 유실되지 않도록 버퍼에 저장
+    bufferLogs: true,
+  });
+
+  // NestJS 내장 Logger를 Winston으로 교체 (Loki로 로그 push 포함)
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   app.use(
     helmet({
