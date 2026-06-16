@@ -3,7 +3,9 @@ import { AppModule } from './app.module';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
+import { shouldBlockMetricsInProduction } from './common/metrics/metrics-production-access';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -21,6 +23,22 @@ async function bootstrap() {
         process.env.NODE_ENV === 'production' ? undefined : false,
     }),
   );
+
+  // 운영에서는 Grafana Cloud scrape를 명시적으로 허용한 경우에만 /metrics를 노출한다.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (
+      shouldBlockMetricsInProduction({
+        nodeEnv: process.env.NODE_ENV,
+        metricsEnabledInProduction: process.env.METRICS_ENABLED_IN_PRODUCTION,
+        path: req.path,
+      })
+    ) {
+      res.status(404).send('Not Found');
+      return;
+    }
+
+    next();
+  });
 
   // 운영 환경에서는 등록된 프론트엔드 도메인만 허용하고, 개발 환경에서는 로컬 테스트를 열어둔다.
   app.enableCors({
@@ -61,4 +79,4 @@ async function bootstrap() {
   );
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+void bootstrap();
