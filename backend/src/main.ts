@@ -7,6 +7,39 @@ import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { shouldBlockMetricsInProduction } from './common/metrics/metrics-production-access';
 
+const isMetricsPath = (path: string): boolean =>
+  path === '/metrics' || path.startsWith('/metrics/');
+
+const isValidMetricsBasicAuth = (
+  authorization: string | undefined,
+): boolean => {
+  const username = process.env.METRICS_USERNAME;
+  const password = process.env.METRICS_PASSWORD;
+
+  if (!username || !password) {
+    return true;
+  }
+
+  if (!authorization?.startsWith('Basic ')) {
+    return false;
+  }
+
+  const credentials = Buffer.from(
+    authorization.slice('Basic '.length),
+    'base64',
+  ).toString('utf8');
+  const separatorIndex = credentials.indexOf(':');
+
+  if (separatorIndex === -1) {
+    return false;
+  }
+
+  return (
+    credentials.slice(0, separatorIndex) === username &&
+    credentials.slice(separatorIndex + 1) === password
+  );
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     // 로거 준비 전 발생하는 시작 로그가 유실되지 않도록 버퍼에 저장
@@ -34,6 +67,16 @@ async function bootstrap() {
       })
     ) {
       res.status(404).send('Not Found');
+      return;
+    }
+
+    // METRICS_USERNAME/PASSWORD가 설정되어 있으면 /metrics에 Basic Auth를 요구한다.
+    if (
+      isMetricsPath(req.path) &&
+      !isValidMetricsBasicAuth(req.headers.authorization)
+    ) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="metrics"');
+      res.status(401).send('Unauthorized');
       return;
     }
 
