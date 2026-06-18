@@ -21,8 +21,6 @@ model User {
   name          String
   image         String?
   email         String?        @unique
-  emailVerified DateTime?      @map("email_verified")
-  password      String?
   isPremium     Boolean        @default(false)
   role          Role           @default(USER)
   accounts      Account[]
@@ -40,16 +38,9 @@ enum Role {
 }
 
 model Account {
-  userId            String  @map("user_id")
+  userId            String @map("user_id")
   provider          String
-  providerAccountId String  @map("provider_account_id")
-  refreshToken      String? @map("refresh_token") @db.Text
-  accessToken       String? @map("access_token") @db.Text
-  expiresAt         Int?    @map("expires_at")
-  tokenType         String? @map("token_type")
-  scope             String?
-  idToken           String? @map("id_token") @db.Text
-  sessionState      String? @map("session_state")
+  providerAccountId String @map("provider_account_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -57,6 +48,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
