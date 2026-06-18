@@ -26,7 +26,6 @@ model User {
   isPremium     Boolean        @default(false)
   role          Role           @default(USER)
   accounts      Account[]
-  clothes       Clothes[]
   refreshTokens RefreshToken[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -78,44 +77,4 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
   @@map("refresh_tokens")
-}
-
-model Clothes {
-  id     String  @id @default(cuid())
-  userId String  @map("user_id")
-  name   String
-  image  String?
-  type   String
-
-  colors     Colors[]
-  categories Categories[]
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("clothes")
-}
-
-model Colors {
-  id         String @id @default(cuid())
-  clothesId  String @map("clothes_id")
-  colorId    String @map("color_id")
-  color      String
-  percentage Int
-
-  clothes Clothes @relation(fields: [clothesId], references: [id], onDelete: Cascade)
-
-  @@index([clothesId])
-  @@map("colors")
-}
-
-model Categories {
-  clothesId String @map("clothes_id")
-  category  String
-
-  clothes Clothes @relation(fields: [clothesId], references: [id], onDelete: Cascade)
-
-  @@id([clothesId, category])
-  @@index([clothesId])
-  @@map("categories")
 }
