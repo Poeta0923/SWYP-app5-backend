@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { User } from '../../generated/prisma/client';
+import { randomUUID } from 'crypto';
+import type { Prisma, User } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { GoogleAuthService } from './google-auth.service';
@@ -17,6 +18,7 @@ export interface AuthUserResponse {
 
 export interface GoogleLoginResult {
   user: AuthUserResponse;
+  refreshToken: string;
 }
 
 @Injectable()
@@ -30,27 +32,86 @@ export class AuthService {
 
   async loginWithGoogle(dto: GoogleLoginDto): Promise<GoogleLoginResult> {
     const profile = await this.googleAuthService.verifyIdToken(dto.idToken);
+    const familyId = randomUUID();
+    const refreshToken = this.tokenService.createRefreshToken();
+    const tokenHash = this.tokenService.hashRefreshToken(refreshToken);
+    const expiresAt = this.tokenService.createRefreshTokenExpiresAt();
+    const refreshTokenTtlSeconds = this.tokenService.getRefreshTokenTtlSeconds();
 
-    const account = await this.prisma.account.findUnique({
-      where: {
-        provider_providerAccountId: {
-          provider: 'google',
-          providerAccountId: profile.providerAccountId,
+    const user = await this.prisma.$transaction(async (tx) => {
+      const account = await tx.account.findUnique({
+        where: {
+          provider_providerAccountId: {
+            provider: 'google',
+            providerAccountId: profile.providerAccountId,
+          },
         },
-      },
-      include: {
-        user: true,
-      },
+        include: {
+          user: true,
+        },
+      });
+
+      const user =
+        account?.user ??
+        (await this.findOrCreateGoogleUser(tx, {
+          email: profile.email,
+          image: profile.image,
+          name: profile.name,
+          providerAccountId: profile.providerAccountId,
+        }));
+
+      await tx.refreshToken.updateMany({
+        where: {
+          userId: user.id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      });
+
+      await tx.refreshToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          familyId,
+          expiresAt,
+        },
+      });
+
+      return tx.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          activeRefreshFamilyId: familyId,
+        },
+      });
     });
 
-    if (account) {
-      return {
-        user: this.toAuthUserResponse(account.user),
-      };
-    }
+    await this.sessionService.setActiveSession(
+      user.id,
+      familyId,
+      refreshTokenTtlSeconds,
+    );
 
+    return {
+      user: this.toAuthUserResponse(user),
+      refreshToken,
+    };
+  }
+
+  private async findOrCreateGoogleUser(
+    tx: Prisma.TransactionClient,
+    profile: {
+      providerAccountId: string;
+      email?: string;
+      name: string;
+      image?: string;
+    },
+  ): Promise<User> {
     const existingUser = profile.email
-      ? await this.prisma.user.findUnique({
+      ? await tx.user.findUnique({
           where: {
             email: profile.email,
           },
@@ -59,7 +120,7 @@ export class AuthService {
 
     const user =
       existingUser ??
-      (await this.prisma.user.create({
+      (await tx.user.create({
         data: {
           email: profile.email,
           image: profile.image,
@@ -67,7 +128,7 @@ export class AuthService {
         },
       }));
 
-    await this.prisma.account.create({
+    await tx.account.create({
       data: {
         provider: 'google',
         providerAccountId: profile.providerAccountId,
@@ -75,9 +136,7 @@ export class AuthService {
       },
     });
 
-    return {
-      user: this.toAuthUserResponse(user),
-    };
+    return user;
   }
 
   private toAuthUserResponse(user: User): AuthUserResponse {

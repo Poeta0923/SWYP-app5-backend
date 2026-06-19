@@ -22,6 +22,7 @@ export class AuthController {
     description: 'Google 로그인 성공',
     schema: {
       example: {
+        refreshToken: 'refresh-token-value',
         user: {
           id: 'clx0000000000000000000000',
           name: '홍길동',
