@@ -9,6 +9,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { GoogleLoginDto } from './dto/google-login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -46,5 +47,31 @@ export class AuthController {
   })
   loginWithGoogle(@Body() dto: GoogleLoginDto) {
     return this.authService.loginWithGoogle(dto);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Access Token 재발급' })
+  @ApiBody({ type: RefreshTokenDto })
+  @ApiOkResponse({
+    description: '토큰 재발급 성공',
+    schema: {
+      example: {
+        accessToken: 'access-token-value',
+        refreshToken: 'new-refresh-token-value',
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Refresh token 검증 실패 또는 세션 폐기',
+  })
+  @ApiInternalServerErrorResponse({
+    description: '서버 내부 오류',
+  })
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto);
   }
 }
