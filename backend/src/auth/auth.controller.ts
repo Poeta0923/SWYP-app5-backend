@@ -74,4 +74,26 @@ export class AuthController {
   refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refresh(dto);
   }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '로그아웃' })
+  @ApiBody({ type: RefreshTokenDto })
+  @ApiOkResponse({
+    description: '로그아웃 성공',
+    schema: {
+      example: {
+        success: true,
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패',
+  })
+  @ApiInternalServerErrorResponse({
+    description: '서버 내부 오류',
+  })
+  logout(@Body() dto: RefreshTokenDto) {
+    return this.authService.logout(dto);
+  }
 }

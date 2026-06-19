@@ -28,6 +28,10 @@ export interface RefreshResult {
   refreshToken: string;
 }
 
+export interface LogoutResult {
+  success: true;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -136,6 +140,23 @@ export class AuthService {
         role: user.role,
       }),
       refreshToken: nextRefreshToken,
+    };
+  }
+
+  async logout(dto: RefreshTokenDto): Promise<LogoutResult> {
+    const tokenHash = this.tokenService.hashRefreshToken(dto.refreshToken);
+    const refreshToken = await this.prisma.refreshToken.findUnique({
+      where: {
+        tokenHash,
+      },
+    });
+
+    if (refreshToken) {
+      await this.revokeRefreshTokenFamily(refreshToken);
+    }
+
+    return {
+      success: true,
     };
   }
 
