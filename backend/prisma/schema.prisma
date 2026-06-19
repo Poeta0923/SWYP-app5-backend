@@ -17,14 +17,15 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  name          String
-  image         String?
-  email         String?        @unique
-  isPremium     Boolean        @default(false)
-  role          Role           @default(USER)
-  accounts      Account[]
-  refreshTokens RefreshToken[]
+  id                    String         @id @default(cuid())
+  name                  String
+  image                 String?
+  email                 String?        @unique
+  isPremium             Boolean        @default(false)
+  role                  Role           @default(USER)
+  activeRefreshFamilyId String?        @map("active_refresh_family_id")
+  accounts              Account[]
+  refreshTokens         RefreshToken[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -68,5 +69,6 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+  @@index([userId, familyId])
   @@map("refresh_tokens")
 }
