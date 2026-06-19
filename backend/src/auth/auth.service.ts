@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Prisma, User } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +24,8 @@ export interface GoogleLoginResult {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly googleAuthService: GoogleAuthService,
@@ -33,6 +35,12 @@ export class AuthService {
 
   async loginWithGoogle(dto: GoogleLoginDto): Promise<GoogleLoginResult> {
     const profile = await this.googleAuthService.verifyIdToken(dto.idToken);
+    const user = await this.resolveGoogleUser({
+      email: profile.email,
+      image: profile.image,
+      name: profile.name,
+      providerAccountId: profile.providerAccountId,
+    });
     const familyId = randomUUID();
     const refreshToken = this.tokenService.createRefreshToken();
     const tokenHash = this.tokenService.hashRefreshToken(refreshToken);
@@ -40,7 +48,39 @@ export class AuthService {
     const refreshTokenTtlSeconds =
       this.tokenService.getRefreshTokenTtlSeconds();
 
-    const user = await this.prisma.$transaction(async (tx) => {
+    await this.sessionService.setPendingActiveSession(user.id, familyId);
+
+    const activatedUser = await this.activateLoginSession({
+      userId: user.id,
+      familyId,
+      tokenHash,
+      expiresAt,
+    });
+
+    await this.sessionService.promoteActiveSession(
+      activatedUser.id,
+      familyId,
+      refreshTokenTtlSeconds,
+    );
+
+    return {
+      user: this.toAuthUserResponse(activatedUser),
+      accessToken: this.tokenService.signAccessToken({
+        sub: activatedUser.id,
+        familyId,
+        role: activatedUser.role,
+      }),
+      refreshToken,
+    };
+  }
+
+  private async resolveGoogleUser(profile: {
+    providerAccountId: string;
+    email?: string;
+    name: string;
+    image?: string;
+  }): Promise<User> {
+    return this.prisma.$transaction(async (tx) => {
       const account = await tx.account.findUnique({
         where: {
           provider_providerAccountId: {
@@ -54,58 +94,63 @@ export class AuthService {
       });
 
       const user =
-        account?.user ??
-        (await this.findOrCreateGoogleUser(tx, {
-          email: profile.email,
-          image: profile.image,
-          name: profile.name,
-          providerAccountId: profile.providerAccountId,
-        }));
+        account?.user ?? (await this.findOrCreateGoogleUser(tx, profile));
 
-      await tx.refreshToken.updateMany({
-        where: {
-          userId: user.id,
-          revokedAt: null,
-        },
-        data: {
-          revokedAt: new Date(),
-        },
-      });
-
-      await tx.refreshToken.create({
-        data: {
-          userId: user.id,
-          tokenHash,
-          familyId,
-          expiresAt,
-        },
-      });
-
-      return tx.user.update({
-        where: {
-          id: user.id,
-        },
-        data: {
-          activeRefreshFamilyId: familyId,
-        },
-      });
+      return user;
     });
+  }
 
-    await this.sessionService.setActiveSession(
-      user.id,
-      familyId,
-      refreshTokenTtlSeconds,
-    );
+  private async activateLoginSession(session: {
+    userId: string;
+    familyId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<User> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.refreshToken.updateMany({
+          where: {
+            userId: session.userId,
+            revokedAt: null,
+          },
+          data: {
+            revokedAt: new Date(),
+          },
+        });
 
-    return {
-      user: this.toAuthUserResponse(user),
-      accessToken: this.tokenService.signAccessToken({
-        sub: user.id,
-        familyId,
-        role: user.role,
-      }),
-      refreshToken,
-    };
+        await tx.refreshToken.create({
+          data: {
+            userId: session.userId,
+            tokenHash: session.tokenHash,
+            familyId: session.familyId,
+            expiresAt: session.expiresAt,
+          },
+        });
+
+        return tx.user.update({
+          where: {
+            id: session.userId,
+          },
+          data: {
+            activeRefreshFamilyId: session.familyId,
+          },
+        });
+      });
+    } catch (error) {
+      try {
+        await this.sessionService.deleteActiveSessionIfMatches(
+          session.userId,
+          session.familyId,
+        );
+      } catch (compensationError) {
+        this.logger.error(
+          'Failed to compensate pending active session after login transaction failure.',
+          compensationError,
+        );
+      }
+
+      throw error;
+    }
   }
 
   private async findOrCreateGoogleUser(
