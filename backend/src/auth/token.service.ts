@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { JwtSignOptions } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'crypto';
-import type { JwtAccessPayload } from './jwt.strategy';
+import type { JwtAccessPayload } from './types/jwt-access-payload.type';
 
 const DEFAULT_REFRESH_TOKEN_EXPIRES_DAYS = 30;
 const DEFAULT_ACCESS_TOKEN_EXPIRES_IN = '15m';
@@ -39,10 +39,8 @@ export class TokenService {
   }
 
   private getAccessTokenExpiresIn(): JwtSignOptions['expiresIn'] {
-    return (
-      this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') ??
-      DEFAULT_ACCESS_TOKEN_EXPIRES_IN
-    ) as JwtSignOptions['expiresIn'];
+    return (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') ??
+      DEFAULT_ACCESS_TOKEN_EXPIRES_IN) as JwtSignOptions['expiresIn'];
   }
 
   private getRefreshTokenExpiresDays(): number {

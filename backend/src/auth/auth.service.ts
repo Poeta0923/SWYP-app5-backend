@@ -37,7 +37,8 @@ export class AuthService {
     const refreshToken = this.tokenService.createRefreshToken();
     const tokenHash = this.tokenService.hashRefreshToken(refreshToken);
     const expiresAt = this.tokenService.createRefreshTokenExpiresAt();
-    const refreshTokenTtlSeconds = this.tokenService.getRefreshTokenTtlSeconds();
+    const refreshTokenTtlSeconds =
+      this.tokenService.getRefreshTokenTtlSeconds();
 
     const user = await this.prisma.$transaction(async (tx) => {
       const account = await tx.account.findUnique({
