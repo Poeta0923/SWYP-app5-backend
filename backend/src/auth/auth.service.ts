@@ -18,6 +18,7 @@ export interface AuthUserResponse {
 
 export interface GoogleLoginResult {
   user: AuthUserResponse;
+  accessToken: string;
   refreshToken: string;
 }
 
@@ -97,6 +98,11 @@ export class AuthService {
 
     return {
       user: this.toAuthUserResponse(user),
+      accessToken: this.tokenService.signAccessToken({
+        sub: user.id,
+        familyId,
+        role: user.role,
+      }),
       refreshToken,
     };
   }
