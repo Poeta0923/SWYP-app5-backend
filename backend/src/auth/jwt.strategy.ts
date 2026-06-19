@@ -23,6 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid access token payload.');
     }
 
+    // JWT 서명만으로는 단일 기기 정책을 보장할 수 없어 Redis active session까지 확인한다.
     await this.sessionService.assertActiveSession(
       payload.sub,
       payload.familyId,

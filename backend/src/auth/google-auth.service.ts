@@ -21,6 +21,7 @@ export class GoogleAuthService {
 
   async verifyIdToken(idToken: string): Promise<GoogleUserProfile> {
     try {
+      // 모바일 앱이 넘긴 ID Token의 서명과 audience를 Google 공식 client로 검증한다.
       const ticket = await this.client.verifyIdToken({
         idToken,
         audience: this.getAllowedClientIds(),
@@ -54,6 +55,7 @@ export class GoogleAuthService {
   }
 
   private getAllowedClientIds(): string[] {
+    // iOS/Android/Web client ID를 모두 허용할 수 있도록 복수 env를 지원한다.
     const clientIds = [
       this.configService.get<string>('GOOGLE_CLIENT_ID'),
       this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),

@@ -44,6 +44,7 @@ export class AuthService {
   ) {}
 
   async loginWithGoogle(dto: GoogleLoginDto): Promise<GoogleLoginResult> {
+    // 모바일 앱에서 받은 Google ID Token만 신뢰하고, 사용자 정보는 서버가 직접 검증해 추출한다.
     const profile = await this.googleAuthService.verifyIdToken(dto.idToken);
     const user = await this.resolveGoogleUser({
       email: profile.email,
@@ -58,6 +59,7 @@ export class AuthService {
     const refreshTokenTtlSeconds =
       this.tokenService.getRefreshTokenTtlSeconds();
 
+    // Redis set을 DB 세션 변경보다 먼저 수행해, Redis 장애가 기존 세션을 깨뜨리지 않게 한다.
     await this.sessionService.setPendingActiveSession(user.id, familyId);
 
     const activatedUser = await this.activateLoginSession({
@@ -67,6 +69,7 @@ export class AuthService {
       expiresAt,
     });
 
+    // DB 커밋 후 pending TTL을 refresh token 만료 시간으로 승격한다.
     await this.sessionService.promoteActiveSession(
       activatedUser.id,
       familyId,
@@ -85,6 +88,7 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshTokenDto): Promise<RefreshResult> {
+    // refresh token 원문은 저장하지 않고, 요청 때마다 hash로 비교한다.
     const tokenHash = this.tokenService.hashRefreshToken(dto.refreshToken);
     const refreshToken = await this.prisma.refreshToken.findUnique({
       where: {
@@ -100,6 +104,7 @@ export class AuthService {
     }
 
     if (refreshToken.revokedAt) {
+      // 폐기된 refresh token 재사용은 탈취 가능성으로 보고 같은 family 전체를 폐기한다.
       await this.revokeRefreshTokenFamily(refreshToken);
       throw this.createInvalidRefreshTokenException();
     }
@@ -113,6 +118,7 @@ export class AuthService {
       refreshToken.familyId,
     );
 
+    // 같은 familyId를 유지하면서 refresh token만 회전해 단일 기기 세션을 이어간다.
     const nextRefreshToken = this.tokenService.createRefreshToken();
     const nextTokenHash = this.tokenService.hashRefreshToken(nextRefreshToken);
     const nextExpiresAt = this.tokenService.createRefreshTokenExpiresAt();
@@ -144,6 +150,7 @@ export class AuthService {
   }
 
   async logout(dto: RefreshTokenDto): Promise<LogoutResult> {
+    // 로그아웃은 idempotent하게 처리해 토큰 존재 여부를 외부에 노출하지 않는다.
     const tokenHash = this.tokenService.hashRefreshToken(dto.refreshToken);
     const refreshToken = await this.prisma.refreshToken.findUnique({
       where: {
@@ -167,6 +174,7 @@ export class AuthService {
     image?: string;
   }): Promise<User> {
     return this.prisma.$transaction(async (tx) => {
+      // Google sub를 Account의 providerAccountId로 사용해 이메일 변경에도 계정을 안정적으로 식별한다.
       const account = await tx.account.findUnique({
         where: {
           provider_providerAccountId: {
@@ -194,6 +202,7 @@ export class AuthService {
   }): Promise<User> {
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // 단일 기기 정책: 새 로그인 family가 활성화되면 기존 refresh token은 모두 폐기한다.
         await tx.refreshToken.updateMany({
           where: {
             userId: session.userId,
@@ -224,6 +233,7 @@ export class AuthService {
       });
     } catch (error) {
       try {
+        // DB 세션 활성화에 실패하면 pending Redis key를 제거해 잘못된 familyId가 오래 남지 않게 한다.
         await this.sessionService.deleteActiveSessionIfMatches(
           session.userId,
           session.familyId,
@@ -296,6 +306,7 @@ export class AuthService {
     nextExpiresAt: Date;
   }): Promise<User> {
     return this.prisma.$transaction(async (tx) => {
+      // revokedAt 조건을 함께 걸어 동시 refresh나 재사용이 한 번만 성공하도록 만든다.
       const updateResult = await tx.refreshToken.updateMany({
         where: {
           id: rotation.currentTokenId,
@@ -330,6 +341,7 @@ export class AuthService {
   private async revokeRefreshTokenFamily(
     refreshToken: RefreshToken,
   ): Promise<void> {
+    // family 단위 폐기는 refresh token 재사용 감지와 명시적 로그아웃에서 공통으로 사용한다.
     await this.prisma.$transaction([
       this.prisma.refreshToken.updateMany({
         where: {

@@ -17,12 +17,14 @@ export class TokenService {
   ) {}
 
   signAccessToken(payload: JwtAccessPayload): string {
+    // access token에는 현재 세션 familyId를 넣어 Redis active session과 매 요청 비교한다.
     return this.jwtService.sign(payload, {
       expiresIn: this.getAccessTokenExpiresIn(),
     });
   }
 
   createRefreshToken(): string {
+    // refresh token은 원문을 한 번만 클라이언트에 내려주고 서버에는 hash만 저장한다.
     return randomBytes(64).toString('base64url');
   }
 
