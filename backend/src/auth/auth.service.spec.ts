@@ -16,6 +16,13 @@ describe('AuthService', () => {
 
   let prisma: {
     $transaction: jest.Mock;
+    refreshToken: {
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    user: {
+      updateMany: jest.Mock;
+    };
   };
   let googleAuthService: {
     verifyIdToken: jest.Mock;
@@ -24,6 +31,7 @@ describe('AuthService', () => {
     setPendingActiveSession: jest.Mock;
     promoteActiveSession: jest.Mock;
     deleteActiveSessionIfMatches: jest.Mock;
+    assertActiveSession: jest.Mock;
   };
   let tokenService: {
     createRefreshToken: jest.Mock;
@@ -44,6 +52,15 @@ describe('AuthService', () => {
     };
     user: {
       update: jest.Mock;
+    };
+  };
+  let rotateTx: {
+    refreshToken: {
+      updateMany: jest.Mock;
+      create: jest.Mock;
+    };
+    user: {
+      findUniqueOrThrow: jest.Mock;
     };
   };
   let service: AuthService;
@@ -76,14 +93,39 @@ describe('AuthService', () => {
       },
     };
 
+    rotateTx = {
+      refreshToken: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn(),
+      },
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(user),
+      },
+    };
+
     let transactionCallCount = 0;
     prisma = {
+      refreshToken: {
+        findUnique: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      user: {
+        updateMany: jest.fn(),
+      },
       $transaction: jest.fn().mockImplementation(async (callback) => {
         transactionCallCount += 1;
+
+        if (Array.isArray(callback)) {
+          return Promise.all(callback);
+        }
 
         if (transactionCallCount === 1) {
           callOrder.push('resolve-user-transaction');
           return callback(resolveTx);
+        }
+
+        if (transactionCallCount === 3) {
+          return callback(rotateTx);
         }
 
         callOrder.push('activate-session-transaction');
@@ -108,11 +150,18 @@ describe('AuthService', () => {
         callOrder.push('promote-session');
       }),
       deleteActiveSessionIfMatches: jest.fn().mockResolvedValue(undefined),
+      assertActiveSession: jest.fn().mockResolvedValue(undefined),
     };
 
     tokenService = {
-      createRefreshToken: jest.fn().mockReturnValue('refresh-token'),
-      hashRefreshToken: jest.fn().mockReturnValue('refresh-token-hash'),
+      createRefreshToken: jest
+        .fn()
+        .mockReturnValueOnce('refresh-token')
+        .mockReturnValue('next-refresh-token'),
+      hashRefreshToken: jest
+        .fn()
+        .mockReturnValueOnce('refresh-token-hash')
+        .mockReturnValue('next-refresh-token-hash'),
       createRefreshTokenExpiresAt: jest.fn().mockReturnValue(new Date()),
       getRefreshTokenTtlSeconds: jest.fn().mockReturnValue(60 * 60 * 24 * 30),
       signAccessToken: jest.fn().mockReturnValue('access-token'),
@@ -197,5 +246,234 @@ describe('AuthService', () => {
       expect.any(String),
     );
     expect(sessionService.promoteActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('rotates a valid refresh token and returns new tokens', async () => {
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback(rotateTx),
+    );
+    tokenService.createRefreshToken.mockReset();
+    tokenService.createRefreshToken.mockReturnValue('next-refresh-token');
+    tokenService.hashRefreshToken.mockReset();
+    tokenService.hashRefreshToken
+      .mockReturnValueOnce('refresh-token-hash')
+      .mockReturnValue('next-refresh-token-hash');
+    const expiresAt = new Date(Date.now() + 60_000);
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'refresh-token-id',
+      userId: user.id,
+      tokenHash: 'refresh-token-hash',
+      familyId: 'family-1',
+      expiresAt,
+      revokedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user,
+    });
+
+    const result = await service.refresh({ refreshToken: 'refresh-token' });
+
+    expect(sessionService.assertActiveSession).toHaveBeenCalledWith(
+      user.id,
+      'family-1',
+    );
+    expect(rotateTx.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'refresh-token-id',
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+    expect(rotateTx.refreshToken.create).toHaveBeenCalledWith({
+      data: {
+        userId: user.id,
+        familyId: 'family-1',
+        tokenHash: 'next-refresh-token-hash',
+        expiresAt: expect.any(Date),
+      },
+    });
+    expect(sessionService.promoteActiveSession).toHaveBeenCalledWith(
+      user.id,
+      'family-1',
+      60 * 60 * 24 * 30,
+    );
+    expect(result).toEqual({
+      accessToken: 'access-token',
+      refreshToken: 'next-refresh-token',
+    });
+  });
+
+  it('rejects unknown refresh tokens', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.refresh({ refreshToken: 'unknown' }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'INVALID_REFRESH_TOKEN',
+      },
+    });
+
+    expect(sessionService.assertActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects expired refresh tokens', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'refresh-token-id',
+      userId: user.id,
+      tokenHash: 'refresh-token-hash',
+      familyId: 'family-1',
+      expiresAt: new Date(Date.now() - 1_000),
+      revokedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user,
+    });
+
+    await expect(
+      service.refresh({ refreshToken: 'expired-refresh-token' }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'INVALID_REFRESH_TOKEN',
+      },
+    });
+  });
+
+  it('revokes the refresh token family when a revoked refresh token is reused', async () => {
+    prisma.$transaction.mockImplementation(async (operations) =>
+      Promise.all(operations),
+    );
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'refresh-token-id',
+      userId: user.id,
+      tokenHash: 'refresh-token-hash',
+      familyId: 'family-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user,
+    });
+
+    await expect(
+      service.refresh({ refreshToken: 'reused-refresh-token' }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'INVALID_REFRESH_TOKEN',
+      },
+    });
+
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: user.id,
+        familyId: 'family-1',
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: user.id,
+        activeRefreshFamilyId: 'family-1',
+      },
+      data: {
+        activeRefreshFamilyId: null,
+      },
+    });
+    expect(sessionService.deleteActiveSessionIfMatches).toHaveBeenCalledWith(
+      user.id,
+      'family-1',
+    );
+  });
+
+  it('revokes the refresh token family on logout and returns success', async () => {
+    prisma.$transaction.mockImplementation(async (operations) =>
+      Promise.all(operations),
+    );
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'refresh-token-id',
+      userId: user.id,
+      tokenHash: 'refresh-token-hash',
+      familyId: 'family-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await service.logout({ refreshToken: 'refresh-token' });
+
+    expect(result).toEqual({ success: true });
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: user.id,
+        familyId: 'family-1',
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: user.id,
+        activeRefreshFamilyId: 'family-1',
+      },
+      data: {
+        activeRefreshFamilyId: null,
+      },
+    });
+    expect(sessionService.deleteActiveSessionIfMatches).toHaveBeenCalledWith(
+      user.id,
+      'family-1',
+    );
+  });
+
+  it('returns success without mutating state when logout receives an unknown refresh token', async () => {
+    prisma.refreshToken.findUnique.mockResolvedValue(null);
+
+    const result = await service.logout({ refreshToken: 'unknown-token' });
+
+    expect(result).toEqual({ success: true });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(sessionService.deleteActiveSessionIfMatches).not.toHaveBeenCalled();
+  });
+
+  it('returns success and still revokes the family when logout receives an already revoked refresh token', async () => {
+    prisma.$transaction.mockImplementation(async (operations) =>
+      Promise.all(operations),
+    );
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'refresh-token-id',
+      userId: user.id,
+      tokenHash: 'refresh-token-hash',
+      familyId: 'family-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await service.logout({ refreshToken: 'revoked-token' });
+
+    expect(result).toEqual({ success: true });
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: user.id,
+        familyId: 'family-1',
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+    expect(sessionService.deleteActiveSessionIfMatches).toHaveBeenCalledWith(
+      user.id,
+      'family-1',
+    );
   });
 });
