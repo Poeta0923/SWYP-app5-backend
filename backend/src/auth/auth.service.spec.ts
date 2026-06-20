@@ -43,6 +43,11 @@ describe('AuthService', () => {
   let resolveTx: {
     account: {
       findUnique: jest.Mock;
+      create: jest.Mock;
+    };
+    user: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
     };
   };
   let activateTx: {
@@ -73,6 +78,11 @@ describe('AuthService', () => {
     resolveTx = {
       account: {
         findUnique: jest.fn().mockResolvedValue({ user }),
+        create: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
       },
     };
 
@@ -193,6 +203,7 @@ describe('AuthService', () => {
         role: user.role,
         isPremium: user.isPremium,
       },
+      isNewUser: false,
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
     });
@@ -205,6 +216,59 @@ describe('AuthService', () => {
       'update-active-family',
       'promote-session',
     ]);
+  });
+
+  it('returns isNewUser true when a Google login creates a new user', async () => {
+    const newUser = {
+      ...user,
+      id: 'user-2',
+      email: 'new-user@example.com',
+    };
+    googleAuthService.verifyIdToken.mockResolvedValueOnce({
+      providerAccountId: 'google-user-2',
+      email: newUser.email,
+      name: newUser.name,
+      image: newUser.image,
+    });
+    resolveTx.account.findUnique.mockResolvedValueOnce(null);
+    resolveTx.user.findUnique.mockResolvedValueOnce(null);
+    resolveTx.user.create.mockResolvedValueOnce(newUser);
+    activateTx.user.update.mockResolvedValueOnce({
+      ...newUser,
+      activeRefreshFamilyId: 'family-1',
+    });
+
+    const result = await service.loginWithGoogle({
+      idToken: 'google-id-token',
+    });
+
+    expect(resolveTx.user.create).toHaveBeenCalledWith({
+      data: {
+        email: newUser.email,
+        image: newUser.image,
+        name: newUser.name,
+      },
+    });
+    expect(resolveTx.account.create).toHaveBeenCalledWith({
+      data: {
+        provider: 'google',
+        providerAccountId: 'google-user-2',
+        userId: newUser.id,
+      },
+    });
+    expect(result).toEqual({
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        image: newUser.image,
+        role: newUser.role,
+        isPremium: newUser.isPremium,
+      },
+      isNewUser: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    });
   });
 
   it('does not mutate session state when pending Redis session activation fails', async () => {
