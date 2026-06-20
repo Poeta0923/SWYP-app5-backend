@@ -25,6 +25,7 @@ export class AuthController {
       example: {
         accessToken: 'access-token-value',
         refreshToken: 'refresh-token-value',
+        isNewUser: false,
         user: {
           id: 'clx0000000000000000000000',
           name: '홍길동',

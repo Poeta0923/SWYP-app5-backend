@@ -19,6 +19,7 @@ export interface AuthUserResponse {
 
 export interface GoogleLoginResult {
   user: AuthUserResponse;
+  isNewUser: boolean;
   accessToken: string;
   refreshToken: string;
 }
@@ -30,6 +31,11 @@ export interface RefreshResult {
 
 export interface LogoutResult {
   success: true;
+}
+
+interface GoogleUserResolution {
+  user: User;
+  isNewUser: boolean;
 }
 
 @Injectable()
@@ -46,7 +52,7 @@ export class AuthService {
   async loginWithGoogle(dto: GoogleLoginDto): Promise<GoogleLoginResult> {
     // 모바일 앱에서 받은 Google ID Token만 신뢰하고, 사용자 정보는 서버가 직접 검증해 추출한다.
     const profile = await this.googleAuthService.verifyIdToken(dto.idToken);
-    const user = await this.resolveGoogleUser({
+    const resolvedUser = await this.resolveGoogleUser({
       email: profile.email,
       image: profile.image,
       name: profile.name,
@@ -60,10 +66,13 @@ export class AuthService {
       this.tokenService.getRefreshTokenTtlSeconds();
 
     // Redis set을 DB 세션 변경보다 먼저 수행해, Redis 장애가 기존 세션을 깨뜨리지 않게 한다.
-    await this.sessionService.setPendingActiveSession(user.id, familyId);
+    await this.sessionService.setPendingActiveSession(
+      resolvedUser.user.id,
+      familyId,
+    );
 
     const activatedUser = await this.activateLoginSession({
-      userId: user.id,
+      userId: resolvedUser.user.id,
       familyId,
       tokenHash,
       expiresAt,
@@ -78,6 +87,7 @@ export class AuthService {
 
     return {
       user: this.toAuthUserResponse(activatedUser),
+      isNewUser: resolvedUser.isNewUser,
       accessToken: this.tokenService.signAccessToken({
         sub: activatedUser.id,
         familyId,
@@ -172,7 +182,7 @@ export class AuthService {
     email?: string;
     name: string;
     image?: string;
-  }): Promise<User> {
+  }): Promise<GoogleUserResolution> {
     return this.prisma.$transaction(async (tx) => {
       // Google sub를 Account의 providerAccountId로 사용해 이메일 변경에도 계정을 안정적으로 식별한다.
       const account = await tx.account.findUnique({
@@ -187,10 +197,14 @@ export class AuthService {
         },
       });
 
-      const user =
-        account?.user ?? (await this.findOrCreateGoogleUser(tx, profile));
+      if (account?.user) {
+        return {
+          user: account.user,
+          isNewUser: false,
+        };
+      }
 
-      return user;
+      return this.findOrCreateGoogleUser(tx, profile);
     });
   }
 
@@ -257,7 +271,7 @@ export class AuthService {
       name: string;
       image?: string;
     },
-  ): Promise<User> {
+  ): Promise<GoogleUserResolution> {
     const existingUser = profile.email
       ? await tx.user.findUnique({
           where: {
@@ -284,7 +298,10 @@ export class AuthService {
       },
     });
 
-    return user;
+    return {
+      user,
+      isNewUser: !existingUser,
+    };
   }
 
   private toAuthUserResponse(user: User): AuthUserResponse {
