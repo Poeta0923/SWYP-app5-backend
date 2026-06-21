@@ -20,8 +20,12 @@ describe('AuthService', () => {
       findUnique: jest.Mock;
       updateMany: jest.Mock;
     };
+    account: {
+      findUnique: jest.Mock;
+    };
     user: {
       updateMany: jest.Mock;
+      deleteMany: jest.Mock;
     };
   };
   let googleAuthService: {
@@ -31,6 +35,7 @@ describe('AuthService', () => {
     setPendingActiveSession: jest.Mock;
     promoteActiveSession: jest.Mock;
     deleteActiveSessionIfMatches: jest.Mock;
+    deleteActiveSession: jest.Mock;
     assertActiveSession: jest.Mock;
   };
   let tokenService: {
@@ -119,8 +124,12 @@ describe('AuthService', () => {
         findUnique: jest.fn(),
         updateMany: jest.fn(),
       },
+      account: {
+        findUnique: jest.fn(),
+      },
       user: {
         updateMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       $transaction: jest.fn().mockImplementation(async (callback) => {
         transactionCallCount += 1;
@@ -160,6 +169,7 @@ describe('AuthService', () => {
         callOrder.push('promote-session');
       }),
       deleteActiveSessionIfMatches: jest.fn().mockResolvedValue(undefined),
+      deleteActiveSession: jest.fn().mockResolvedValue(undefined),
       assertActiveSession: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -539,5 +549,125 @@ describe('AuthService', () => {
       user.id,
       'family-1',
     );
+  });
+
+  it('deletes the current user when the reauthenticated Google account matches', async () => {
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback(prisma),
+    );
+    prisma.account.findUnique.mockResolvedValue({
+      userId: user.id,
+    });
+    prisma.user.deleteMany.mockResolvedValue({ count: 1 });
+
+    const result = await service.deleteAccount(
+      { sub: user.id, familyId: 'family-1', role: user.role },
+      { idToken: 'google-id-token' },
+    );
+
+    expect(googleAuthService.verifyIdToken).toHaveBeenCalledWith(
+      'google-id-token',
+    );
+    expect(prisma.account.findUnique).toHaveBeenCalledWith({
+      where: {
+        provider_providerAccountId: {
+          provider: 'google',
+          providerAccountId: 'google-user-1',
+        },
+      },
+      select: {
+        userId: true,
+      },
+    });
+    expect(prisma.user.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: user.id,
+      },
+    });
+    expect(sessionService.deleteActiveSession).toHaveBeenCalledWith(user.id);
+    expect(result).toEqual({ success: true });
+  });
+
+  it('rejects account deletion when the Google account does not exist', async () => {
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback(prisma),
+    );
+    prisma.account.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.deleteAccount(
+        { sub: user.id, familyId: 'family-1', role: user.role },
+        { idToken: 'google-id-token' },
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'GOOGLE_ACCOUNT_MISMATCH',
+      },
+    });
+
+    expect(prisma.user.deleteMany).not.toHaveBeenCalled();
+    expect(sessionService.deleteActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects account deletion when the Google account belongs to another user', async () => {
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback(prisma),
+    );
+    prisma.account.findUnique.mockResolvedValue({
+      userId: 'user-2',
+    });
+
+    await expect(
+      service.deleteAccount(
+        { sub: user.id, familyId: 'family-1', role: user.role },
+        { idToken: 'google-id-token' },
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'GOOGLE_ACCOUNT_MISMATCH',
+      },
+    });
+
+    expect(prisma.user.deleteMany).not.toHaveBeenCalled();
+    expect(sessionService.deleteActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('does not delete the user when Google ID token verification fails', async () => {
+    const verificationError = new Error('invalid google token');
+    googleAuthService.verifyIdToken.mockRejectedValueOnce(verificationError);
+
+    await expect(
+      service.deleteAccount(
+        { sub: user.id, familyId: 'family-1', role: user.role },
+        { idToken: 'invalid-google-id-token' },
+      ),
+    ).rejects.toBe(verificationError);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.user.deleteMany).not.toHaveBeenCalled();
+    expect(sessionService.deleteActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('still returns success when the user was concurrently deleted after account verification', async () => {
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback(prisma),
+    );
+    prisma.account.findUnique.mockResolvedValue({
+      userId: user.id,
+    });
+    prisma.user.deleteMany.mockResolvedValue({ count: 0 });
+
+    const result = await service.deleteAccount(
+      { sub: user.id, familyId: 'family-1', role: user.role },
+      { idToken: 'google-id-token' },
+    );
+
+    expect(prisma.user.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: user.id,
+      },
+    });
+    expect(sessionService.deleteActiveSession).toHaveBeenCalledWith(user.id);
+    expect(result).toEqual({ success: true });
   });
 });

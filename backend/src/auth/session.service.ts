@@ -80,6 +80,37 @@ export class SessionService {
     );
   }
 
+  async deleteActiveSession(userId: string): Promise<void> {
+    let lastError: unknown;
+
+    for (
+      let attempt = 1;
+      attempt <= ACTIVE_SESSION_DELETE_RETRY_COUNT;
+      attempt++
+    ) {
+      try {
+        if (!this.redisService.isReady()) {
+          throw new ServiceUnavailableException('Redis client is not ready.');
+        }
+
+        // 회원 탈퇴는 user 자체가 사라지므로 familyId 일치 여부와 무관하게 세션 캐시를 지운다.
+        await this.redisService
+          .getClient()
+          .del(this.createActiveSessionKey(userId));
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    // DB 삭제는 이미 끝난 상태일 수 있어 Redis 정리 실패는 로그만 남긴다.
+    // access token은 짧게 만료되고 refresh token은 DB cascade로 사라져 재발급이 막힌다.
+    this.logger.error(
+      `Failed to delete active session after ${ACTIVE_SESSION_DELETE_RETRY_COUNT} attempts.`,
+      lastError,
+    );
+  }
+
   async setActiveSession(
     userId: string,
     familyId: string,
