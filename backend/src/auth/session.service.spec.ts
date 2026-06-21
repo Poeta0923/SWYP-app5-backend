@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { SessionService } from './session.service';
 
 describe('SessionService', () => {
@@ -22,6 +22,7 @@ describe('SessionService', () => {
   let service: SessionService;
 
   beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
     prisma = {
       user: {
         findUnique: jest.fn(),
@@ -40,6 +41,10 @@ describe('SessionService', () => {
       getClient: jest.fn().mockReturnValue(redisClient),
     };
     service = new SessionService(prisma as never, redisService as never);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('stores pending active sessions with a short TTL', async () => {
@@ -89,5 +94,25 @@ describe('SessionService', () => {
     await service.deleteActiveSessionIfMatches('user-1', 'family-1');
 
     expect(redisClient.del).toHaveBeenCalledWith('auth:active-session:user-1');
+  });
+
+  it('deletes an active session without checking the issued family', async () => {
+    await service.deleteActiveSession('user-1');
+
+    expect(redisClient.del).toHaveBeenCalledWith('auth:active-session:user-1');
+  });
+
+  it('logs and completes when unconditional active session deletion fails', async () => {
+    redisService.isReady.mockReturnValue(false);
+
+    await expect(
+      service.deleteActiveSession('user-1'),
+    ).resolves.toBeUndefined();
+
+    expect(redisClient.del).not.toHaveBeenCalled();
+    expect(Logger.prototype.error).toHaveBeenCalledWith(
+      'Failed to delete active session after 2 attempts.',
+      expect.anything(),
+    );
   });
 });

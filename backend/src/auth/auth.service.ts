@@ -2,11 +2,13 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Prisma, RefreshToken, User } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { GoogleAuthService } from './google-auth.service';
 import { SessionService } from './session.service';
 import { TokenService } from './token.service';
+import type { JwtAccessPayload } from './types/jwt-access-payload.type';
 
 export interface AuthUserResponse {
   id: string;
@@ -30,6 +32,10 @@ export interface RefreshResult {
 }
 
 export interface LogoutResult {
+  success: true;
+}
+
+export interface DeleteAccountResult {
   success: true;
 }
 
@@ -171,6 +177,49 @@ export class AuthService {
     if (refreshToken) {
       await this.revokeRefreshTokenFamily(refreshToken);
     }
+
+    return {
+      success: true,
+    };
+  }
+
+  async deleteAccount(
+    currentUser: JwtAccessPayload,
+    dto: DeleteAccountDto,
+  ): Promise<DeleteAccountResult> {
+    // 파괴적 작업이므로 앱 access token만 믿지 않고 Google 재인증 ID Token까지 검증한다.
+    const profile = await this.googleAuthService.verifyIdToken(dto.idToken);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Google sub(providerAccountId)를 기준으로 찾아야 이메일 변경에도 같은 계정을 안정적으로 식별할 수 있다.
+      const account = await tx.account.findUnique({
+        where: {
+          provider_providerAccountId: {
+            provider: 'google',
+            providerAccountId: profile.providerAccountId,
+          },
+        },
+        select: {
+          userId: true,
+        },
+      });
+
+      // 현재 로그인 사용자와 재인증한 Google 계정이 다르면 계정 탈취/오삭제 가능성이 있어 차단한다.
+      if (!account || account.userId !== currentUser.sub) {
+        throw this.createGoogleAccountMismatchException();
+      }
+
+      // Account/RefreshToken은 schema의 onDelete: Cascade로 함께 삭제된다.
+      // deleteMany를 쓰면 동시 탈퇴 등으로 이미 삭제된 경우에도 P2025가 500으로 새지 않는다.
+      await tx.user.deleteMany({
+        where: {
+          id: currentUser.sub,
+        },
+      });
+    });
+
+    // Redis active-session key는 DB cascade 대상이 아니므로 별도로 정리한다.
+    await this.sessionService.deleteActiveSession(currentUser.sub);
 
     return {
       success: true,
@@ -391,6 +440,13 @@ export class AuthService {
     return new UnauthorizedException({
       code: 'INVALID_REFRESH_TOKEN',
       message: '유효하지 않은 refresh token입니다.',
+    });
+  }
+
+  private createGoogleAccountMismatchException(): UnauthorizedException {
+    return new UnauthorizedException({
+      code: 'GOOGLE_ACCOUNT_MISMATCH',
+      message: '현재 계정과 Google 재인증 계정이 일치하지 않습니다.',
     });
   }
 }
