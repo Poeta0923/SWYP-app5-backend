@@ -26,6 +26,7 @@ model User {
   activeRefreshFamilyId String?        @map("active_refresh_family_id")
   accounts              Account[]
   refreshTokens         RefreshToken[]
+  people                People[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -71,4 +72,28 @@ model RefreshToken {
   @@index([familyId])
   @@index([userId, familyId])
   @@map("refresh_tokens")
+}
+
+model People {
+  id           String              @id @default(cuid())
+  userId       String              @map("user_id")
+  name         String
+  image        String?
+  phoneNumber  String?             @map("phone_number")
+  job          String?
+  company      String?
+  relationship String?
+  personality  String?
+  notification NotificationSetting
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum NotificationSetting {
+  ALL
+  BIRTHDAY
+  SCHEDULE
+  NONE
 }
