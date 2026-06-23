@@ -17,16 +17,23 @@ datasource db {
 }
 
 model User {
-  id                    String         @id @default(cuid())
+  id                    String           @id @default(cuid())
   name                  String
   image                 String?
-  email                 String?        @unique
-  isPremium             Boolean        @default(false)
-  role                  Role           @default(USER)
-  activeRefreshFamilyId String?        @map("active_refresh_family_id")
+  email                 String?          @unique
+  isPremium             Boolean          @default(false)
+  role                  Role             @default(USER)
+  activeRefreshFamilyId String?          @map("active_refresh_family_id")
   accounts              Account[]
   refreshTokens         RefreshToken[]
-  people                People[]
+  people                Person[]
+  businessCards         BusinessCard[]
+  extraContacts         ExtraContact[]
+  records               Record[]
+  schedules             Schedule[]
+  schedulePeople        SchedulePerson[]
+  recordPeople          RecordPerson[]
+  recordKeywords        RecordKeyword[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -74,26 +81,155 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-model People {
-  id           String              @id @default(cuid())
-  userId       String              @map("user_id")
-  name         String
-  image        String?
-  phoneNumber  String?             @map("phone_number")
-  job          String?
-  company      String?
-  relationship String?
-  personality  String?
-  notification NotificationSetting
+model Person {
+  id                          String           @id @default(cuid())
+  userId                      String           @map("user_id")
+  name                        String
+  image                       String?
+  birthDate                   DateTime?        @map("birth_date") @db.Date
+  isImportant                 Boolean          @default(false) @map("is_important")
+  phoneNumber                 String?          @map("phone_number")
+  job                         String?
+  company                     String?
+  relationship                String?
+  personality                 String?
+  birthdayNotificationEnabled Boolean          @default(false) @map("birthday_notification_enabled")
+  scheduleNotificationEnabled Boolean          @default(false) @map("schedule_notification_enabled")
+  businessCards               BusinessCard[]
+  extraContacts               ExtraContact[]
+  schedules                   SchedulePerson[]
+  records                     RecordPerson[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([id, userId])
   @@index([userId])
+  @@map("people")
 }
 
-enum NotificationSetting {
-  ALL
-  BIRTHDAY
-  SCHEDULE
-  NONE
+model BusinessCard {
+  id       String  @id @default(cuid())
+  userId   String  @map("user_id")
+  personId String  @map("person_id")
+  image    String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([personId])
+  @@map("business_cards")
+}
+
+model ExtraContact {
+  id       String @id @default(cuid())
+  userId   String @map("user_id")
+  personId String @map("person_id")
+  type     String
+  content  String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([personId])
+  @@map("extra_contacts")
+}
+
+model Schedule {
+  id                  String           @id @default(cuid())
+  userId              String           @map("user_id")
+  title               String           @default("제목 없음")
+  content             String?
+  scheduleTime        DateTime?        @map("schedule_time")
+  reminderTime        DateTime?        @map("reminder_time")
+  notificationEnabled Boolean          @default(false) @map("notification_enabled")
+  people              SchedulePerson[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("schedules")
+}
+
+model Record {
+  id        String          @id @default(cuid())
+  userId    String          @map("user_id")
+  type      RecordType      @default(TEXT)
+  title     String          @default("제목 없음")
+  content   String?
+  voiceFile String?         @map("voice_file")
+  people    RecordPerson[]
+  keywords  RecordKeyword[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("records")
+}
+
+enum RecordType {
+  TEXT
+  VOICE
+}
+
+model SchedulePerson {
+  userId     String @map("user_id")
+  scheduleId String @map("schedule_id")
+  personId   String @map("person_id")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedule Schedule @relation(fields: [scheduleId, userId], references: [id, userId], onDelete: Cascade)
+  person   Person   @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@id([scheduleId, personId])
+  @@index([userId])
+  @@index([personId])
+  @@map("schedule_people")
+}
+
+model RecordPerson {
+  userId   String @map("user_id")
+  recordId String @map("record_id")
+  personId String @map("person_id")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  record Record @relation(fields: [recordId, userId], references: [id, userId], onDelete: Cascade)
+  person Person @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@id([recordId, personId])
+  @@index([userId])
+  @@index([personId])
+  @@map("record_people")
+}
+
+model RecordKeyword {
+  userId   String @map("user_id")
+  recordId String @map("record_id")
+  name     String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  record Record @relation(fields: [recordId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@id([recordId, name])
+  @@index([userId])
+  @@index([userId, name])
+  @@map("record_keywords")
 }
