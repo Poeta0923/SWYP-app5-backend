@@ -17,15 +17,17 @@ datasource db {
 }
 
 model User {
-  id                    String            @id @default(cuid())
+  id                    String               @id @default(cuid())
   name                  String
   image                 String?
-  email                 String?           @unique
-  isPremium             Boolean           @default(false)
-  role                  Role              @default(USER)
-  activeRefreshFamilyId String?           @map("active_refresh_family_id")
+  email                 String?              @unique
+  isPremium             Boolean              @default(false)
+  role                  Role                 @default(USER)
+  activeRefreshFamilyId String?              @map("active_refresh_family_id")
   accounts              Account[]
   refreshTokens         RefreshToken[]
+  agreements            UserAgreement[]
+  agreementEvents       UserAgreementEvent[]
   people                Person[]
   businessCards         BusinessCard[]
   extraContacts         ExtraContact[]
@@ -37,8 +39,9 @@ model User {
   recordPeople          RecordPerson[]
   recordKeywords        RecordKeyword[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  recordMemos RecordMemo[]
 
   @@map("users")
 }
@@ -46,6 +49,77 @@ model User {
 enum Role {
   USER
   ADMIN
+}
+
+model AgreementDocument {
+  id          String               @id @default(cuid())
+  type        AgreementType
+  version     String
+  title       String
+  content     String
+  contentHash String               @map("content_hash")
+  effectiveAt DateTime             @map("effective_at")
+  retiredAt   DateTime?            @map("retired_at")
+  agreements  UserAgreement[]
+  events      UserAgreementEvent[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([type, version])
+  @@index([type, effectiveAt])
+  @@map("agreement_documents")
+}
+
+enum AgreementType {
+  TERMS
+  PRIVACY_REQUIRED
+  MARKETING_EMAIL
+  MARKETING_SMS
+}
+
+model UserAgreement {
+  id          String               @id @default(cuid())
+  userId      String               @map("user_id")
+  documentId  String               @map("document_id")
+  agreedAt    DateTime             @map("agreed_at")
+  withdrawnAt DateTime?            @map("withdrawn_at")
+  events      UserAgreementEvent[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document AgreementDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, documentId])
+  @@index([documentId, withdrawnAt])
+  @@map("user_agreements")
+}
+
+model UserAgreementEvent {
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
+  agreementId String?         @map("agreement_id")
+  documentId  String          @map("document_id")
+  action      AgreementAction
+  occurredAt  DateTime        @default(now()) @map("occurred_at")
+  ipAddress   String?         @map("ip_address")
+  userAgent   String?         @map("user_agent")
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agreement UserAgreement?    @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  document  AgreementDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@index([userId, occurredAt])
+  @@index([documentId, action, occurredAt])
+  @@index([agreementId])
+  @@map("user_agreement_events")
+}
+
+enum AgreementAction {
+  AGREED
+  WITHDRAWN
 }
 
 model Account {
@@ -168,6 +242,21 @@ model Schedule {
   @@map("schedules")
 }
 
+model SchedulePerson {
+  userId     String @map("user_id")
+  scheduleId String @map("schedule_id")
+  personId   String @map("person_id")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedule Schedule @relation(fields: [scheduleId, userId], references: [id, userId], onDelete: Cascade)
+  person   Person   @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@id([scheduleId, personId])
+  @@index([userId])
+  @@index([personId])
+  @@map("schedule_people")
+}
+
 model PushToken {
   id         String        @id @default(cuid())
   userId     String        @map("user_id")
@@ -235,14 +324,15 @@ enum NotificationStatus {
 }
 
 model Record {
-  id        String          @id @default(cuid())
-  userId    String          @map("user_id")
-  type      RecordType      @default(TEXT)
-  title     String          @default("제목 없음")
-  content   String?
-  voiceFile String?         @map("voice_file")
-  people    RecordPerson[]
-  keywords  RecordKeyword[]
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
+  type        RecordType      @default(TEXT)
+  title       String          @default("제목 없음")
+  content     String?
+  voiceFile   String?         @map("voice_file")
+  people      RecordPerson[]
+  keywords    RecordKeyword[]
+  recordMemos RecordMemo[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -257,21 +347,6 @@ model Record {
 enum RecordType {
   TEXT
   VOICE
-}
-
-model SchedulePerson {
-  userId     String @map("user_id")
-  scheduleId String @map("schedule_id")
-  personId   String @map("person_id")
-
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  schedule Schedule @relation(fields: [scheduleId, userId], references: [id, userId], onDelete: Cascade)
-  person   Person   @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
-
-  @@id([scheduleId, personId])
-  @@index([userId])
-  @@index([personId])
-  @@map("schedule_people")
 }
 
 model RecordPerson {
@@ -301,4 +376,22 @@ model RecordKeyword {
   @@index([userId])
   @@index([userId, name])
   @@map("record_keywords")
+}
+
+model RecordMemo {
+  id           String @id @default(cuid())
+  userId       String @map("user_id")
+  recordId     String @map("record_id")
+  content      String
+  startSeconds Int    @map("start_seconds")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  record Record @relation(fields: [recordId, userId], references: [id, userId], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([recordId])
+  @@map("record_memos")
 }
