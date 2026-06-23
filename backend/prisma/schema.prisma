@@ -185,6 +185,12 @@ model PushToken {
   @@map("push_tokens")
 }
 
+enum PushPlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
 model NotificationJob {
   id           String             @id @default(cuid())
   userId       String             @map("user_id")
@@ -216,6 +222,18 @@ model NotificationJob {
   @@map("notification_jobs")
 }
 
+enum NotificationType {
+  SCHEDULE
+  BIRTHDAY
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
 model Record {
   id        String          @id @default(cuid())
   userId    String          @map("user_id")
@@ -239,24 +257,6 @@ model Record {
 enum RecordType {
   TEXT
   VOICE
-}
-
-enum PushPlatform {
-  IOS
-  ANDROID
-  WEB
-}
-
-enum NotificationType {
-  SCHEDULE
-  BIRTHDAY
-}
-
-enum NotificationStatus {
-  PENDING
-  SENT
-  FAILED
-  CANCELED
 }
 
 model SchedulePerson {
