@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  type AgreementDocument,
+import { Injectable } from '@nestjs/common';
+import type {
+  AgreementDocument,
   AgreementType,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,34 +14,12 @@ export interface AgreementStatusResponse {
   agreed: boolean;
 }
 
-const REQUIRED_AGREEMENT_TYPES = new Set<AgreementType>([
-  AgreementType.TERMS,
-  AgreementType.PRIVACY_REQUIRED,
-]);
-
 @Injectable()
 export class AgreementsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getActiveAgreement(type: AgreementType): Promise<AgreementDocument> {
-    const document = await this.prisma.agreementDocument.findFirst({
-      where: {
-        type,
-        retiredAt: null,
-        effectiveAt: {
-          lte: new Date(),
-        },
-      },
-      orderBy: {
-        effectiveAt: 'desc',
-      },
-    });
-
-    if (!document) {
-      throw new NotFoundException('활성화된 약관이 없습니다.');
-    }
-
-    return document;
+  async getActiveAgreements(): Promise<AgreementDocument[]> {
+    return this.findActiveAgreementDocuments();
   }
 
   async getActiveAgreementStatuses(
@@ -75,7 +53,7 @@ export class AgreementsService {
       documentId: document.id,
       version: document.version,
       title: document.title,
-      required: REQUIRED_AGREEMENT_TYPES.has(document.type),
+      required: document.required,
       agreed: agreedDocumentIds.has(document.id),
     }));
   }
@@ -97,7 +75,10 @@ export class AgreementsService {
         },
       ],
     });
-    const documentsByType = new Map<AgreementType, AgreementDocument>();
+    const documentsByType = new Map<
+      AgreementDocument['type'],
+      AgreementDocument
+    >();
 
     for (const document of documents) {
       if (!documentsByType.has(document.type)) {

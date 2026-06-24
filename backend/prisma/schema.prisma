@@ -58,6 +58,7 @@ model AgreementDocument {
   title       String
   content     String
   contentHash String               @map("content_hash")
+  required    Boolean              @default(false)
   effectiveAt DateTime             @map("effective_at")
   retiredAt   DateTime?            @map("retired_at")
   agreements  UserAgreement[]
