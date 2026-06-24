@@ -7,6 +7,7 @@ import { MetricsModule } from './common/metrics/metrics.module';
 import { RedisModule } from './redis/redis.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { AgreementsModule } from './agreements/agreements.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AuthModule } from './auth/auth.module';
     RedisModule,
     PrismaModule,
     AuthModule,
+    AgreementsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
