@@ -11,6 +11,7 @@ import { AgreementsService } from './agreements.service';
 describe('AgreementsController', () => {
   let agreementsService: {
     getActiveAgreements: jest.Mock;
+    agreeAgreements: jest.Mock;
   };
   let controller: AgreementsController;
 
@@ -19,6 +20,12 @@ describe('AgreementsController', () => {
       getActiveAgreements: jest.fn().mockResolvedValue([
         {
           id: 'agreement-document-id',
+        },
+      ]),
+      agreeAgreements: jest.fn().mockResolvedValue([
+        {
+          documentId: 'agreement-document-id',
+          agreed: true,
         },
       ]),
     };
@@ -59,5 +66,57 @@ describe('AgreementsController', () => {
     ]);
 
     expect(agreementsService.getActiveAgreements).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers POST /agreements/consents behind JwtAuthGuard', () => {
+    expect(
+      Reflect.getMetadata(
+        PATH_METADATA,
+        AgreementsController.prototype.agreeAgreements,
+      ),
+    ).toBe('consents');
+    expect(
+      Reflect.getMetadata(
+        METHOD_METADATA,
+        AgreementsController.prototype.agreeAgreements,
+      ),
+    ).toBe(RequestMethod.POST);
+    expect(
+      Reflect.getMetadata(
+        GUARDS_METADATA,
+        AgreementsController.prototype.agreeAgreements,
+      ),
+    ).toEqual([JwtAuthGuard]);
+  });
+
+  it('passes the authenticated user, document IDs, and request metadata to the service', async () => {
+    await expect(
+      controller.agreeAgreements(
+        {
+          sub: 'user-1',
+          familyId: 'family-1',
+          role: 'USER',
+        },
+        {
+          agreementDocumentIds: ['agreement-document-id'],
+        },
+        {
+          ip: '127.0.0.1',
+          get: jest.fn().mockReturnValue('jest'),
+        } as never,
+      ),
+    ).resolves.toEqual([
+      {
+        documentId: 'agreement-document-id',
+        agreed: true,
+      },
+    ]);
+
+    expect(agreementsService.agreeAgreements).toHaveBeenCalledWith({
+      userId: 'user-1',
+      agreementDocumentIds: ['agreement-document-id'],
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest',
+    });
   });
 });

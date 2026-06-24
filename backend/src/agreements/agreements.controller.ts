@@ -1,14 +1,21 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import type { Request } from 'express';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { AgreementsService } from './agreements.service';
+import { AgreeAgreementsDto } from './dto/agree-agreements.dto';
 import { AgreementDocumentEntity } from './entities/agreement-document.entity';
+import { AgreementStatusEntity } from './entities/agreement-status.entity';
 
 @ApiTags('agreements')
 @Controller('agreements')
@@ -29,5 +36,34 @@ export class AgreementsController {
   })
   getActiveAgreements() {
     return this.agreementsService.getActiveAgreements();
+  }
+
+  @Post('consents')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '약관 동의 저장' })
+  @ApiBody({ type: AgreeAgreementsDto })
+  @ApiOkResponse({
+    description: '약관 동의 저장 성공',
+    type: AgreementStatusEntity,
+    isArray: true,
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패 또는 현재 유효하지 않은 약관 문서',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  agreeAgreements(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Body() dto: AgreeAgreementsDto,
+    @Req() request: Request,
+  ) {
+    return this.agreementsService.agreeAgreements({
+      userId: currentUser.sub,
+      agreementDocumentIds: dto.agreementDocumentIds,
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
   }
 }
