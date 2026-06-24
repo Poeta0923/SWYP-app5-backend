@@ -5,9 +5,9 @@ export class AgreeAgreementsDto {
   @ApiProperty({
     description: '동의할 현재 유효 약관 문서 ID 목록',
     example: [
-      'test-agreement-terms-001',
-      'test-agreement-privacy-required-001',
-      'test-agreement-marketing-email-001',
+      'clx0000000000000000000001',
+      'clx0000000000000000000002',
+      'clx0000000000000000000003',
     ],
   })
   @IsArray()
