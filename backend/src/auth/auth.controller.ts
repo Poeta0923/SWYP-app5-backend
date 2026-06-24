@@ -34,6 +34,16 @@ export class AuthController {
           role: 'USER',
           isPremium: false,
         },
+        agreements: [
+          {
+            type: 'TERMS',
+            documentId: 'clx0000000000000000000001',
+            version: '0.0.1',
+            title: '이용 약관 동의(필수)',
+            required: true,
+            agreed: false,
+          },
+        ],
       },
     },
   })

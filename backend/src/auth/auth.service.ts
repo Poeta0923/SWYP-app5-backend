@@ -1,6 +1,10 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Prisma, RefreshToken, User } from '../../generated/prisma/client';
+import {
+  AgreementsService,
+  type AgreementStatusResponse,
+} from '../agreements/agreements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
@@ -21,6 +25,7 @@ export interface AuthUserResponse {
 
 export interface GoogleLoginResult {
   user: AuthUserResponse;
+  agreements: AgreementStatusResponse[];
   isNewUser: boolean;
   accessToken: string;
   refreshToken: string;
@@ -53,6 +58,7 @@ export class AuthService {
     private readonly googleAuthService: GoogleAuthService,
     private readonly sessionService: SessionService,
     private readonly tokenService: TokenService,
+    private readonly agreementsService: AgreementsService,
   ) {}
 
   async loginWithGoogle(dto: GoogleLoginDto): Promise<GoogleLoginResult> {
@@ -90,9 +96,13 @@ export class AuthService {
       familyId,
       refreshTokenTtlSeconds,
     );
+    const agreements = await this.agreementsService.getActiveAgreementStatuses(
+      activatedUser.id,
+    );
 
     return {
       user: this.toAuthUserResponse(activatedUser),
+      agreements,
       isNewUser: resolvedUser.isNewUser,
       accessToken: this.tokenService.signAccessToken({
         sub: activatedUser.id,
