@@ -3,6 +3,7 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
+  ApiConflictResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -49,7 +50,10 @@ export class AgreementsController {
     isArray: true,
   })
   @ApiBadRequestResponse({
-    description: '요청 body 검증 실패 또는 현재 유효하지 않은 약관 문서',
+    description: '요청 body 검증 실패',
+  })
+  @ApiConflictResponse({
+    description: '약관 변경으로 재로그인 필요',
   })
   @ApiUnauthorizedResponse({
     description: 'Access token 검증 실패 또는 세션 만료',
