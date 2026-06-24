@@ -20,7 +20,7 @@ describe('AgreementsService', () => {
     service = new AgreementsService(prisma as unknown as PrismaService);
   });
 
-  it('returns the latest active PRIVACY_REQUIRED document effective at or before now', async () => {
+  it('returns the latest active document for the requested type effective at or before now', async () => {
     const effectiveAt = new Date('2026-06-24T00:00:00.000Z');
     const document = {
       id: 'agreement-document-id',
@@ -36,9 +36,9 @@ describe('AgreementsService', () => {
     };
     prisma.agreementDocument.findFirst.mockResolvedValue(document);
 
-    await expect(service.getActivePrivacyRequiredAgreement()).resolves.toEqual(
-      document,
-    );
+    await expect(
+      service.getActiveAgreement(AgreementType.PRIVACY_REQUIRED),
+    ).resolves.toEqual(document);
 
     expect(prisma.agreementDocument.findFirst).toHaveBeenCalledTimes(1);
     expect(prisma.agreementDocument.findFirst).toHaveBeenCalledWith({
@@ -55,11 +55,11 @@ describe('AgreementsService', () => {
     });
   });
 
-  it('throws NotFoundException when there is no active PRIVACY_REQUIRED document', async () => {
+  it('throws NotFoundException when there is no active document for the requested type', async () => {
     prisma.agreementDocument.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.getActivePrivacyRequiredAgreement(),
+      service.getActiveAgreement(AgreementType.PRIVACY_REQUIRED),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

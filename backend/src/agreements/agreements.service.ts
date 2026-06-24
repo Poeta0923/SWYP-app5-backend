@@ -9,10 +9,10 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AgreementsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getActivePrivacyRequiredAgreement(): Promise<AgreementDocument> {
+  async getActiveAgreement(type: AgreementType): Promise<AgreementDocument> {
     const document = await this.prisma.agreementDocument.findFirst({
       where: {
-        type: AgreementType.PRIVACY_REQUIRED,
+        type,
         retiredAt: null,
         effectiveAt: {
           lte: new Date(),
@@ -24,7 +24,7 @@ export class AgreementsService {
     });
 
     if (!document) {
-      throw new NotFoundException('활성화된 필수 개인정보 약관이 없습니다.');
+      throw new NotFoundException('활성화된 약관이 없습니다.');
     }
 
     return document;

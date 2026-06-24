@@ -1,17 +1,18 @@
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { AgreementType } from '../../generated/prisma/client';
 import { AgreementsController } from './agreements.controller';
 import { AgreementsService } from './agreements.service';
 
 describe('AgreementsController', () => {
   let agreementsService: {
-    getActivePrivacyRequiredAgreement: jest.Mock;
+    getActiveAgreement: jest.Mock;
   };
   let controller: AgreementsController;
 
   beforeEach(() => {
     agreementsService = {
-      getActivePrivacyRequiredAgreement: jest.fn().mockResolvedValue({
+      getActiveAgreement: jest.fn().mockResolvedValue({
         id: 'agreement-document-id',
       }),
     };
@@ -20,33 +21,33 @@ describe('AgreementsController', () => {
     );
   });
 
-  it('registers GET /agreements/privacy-required', () => {
+  it('registers GET /agreements/:type', () => {
     expect(Reflect.getMetadata(PATH_METADATA, AgreementsController)).toBe(
       'agreements',
     );
     expect(
       Reflect.getMetadata(
         PATH_METADATA,
-        AgreementsController.prototype.getActivePrivacyRequiredAgreement,
+        AgreementsController.prototype.getActiveAgreement,
       ),
-    ).toBe('privacy-required');
+    ).toBe(':type');
     expect(
       Reflect.getMetadata(
         METHOD_METADATA,
-        AgreementsController.prototype.getActivePrivacyRequiredAgreement,
+        AgreementsController.prototype.getActiveAgreement,
       ),
     ).toBe(RequestMethod.GET);
   });
 
-  it('returns the active required privacy agreement from the service', async () => {
+  it('returns the active agreement for the requested type from the service', async () => {
     await expect(
-      controller.getActivePrivacyRequiredAgreement(),
+      controller.getActiveAgreement(AgreementType.PRIVACY_REQUIRED),
     ).resolves.toEqual({
       id: 'agreement-document-id',
     });
 
-    expect(
-      agreementsService.getActivePrivacyRequiredAgreement,
-    ).toHaveBeenCalledTimes(1);
+    expect(agreementsService.getActiveAgreement).toHaveBeenCalledWith(
+      AgreementType.PRIVACY_REQUIRED,
+    );
   });
 });
