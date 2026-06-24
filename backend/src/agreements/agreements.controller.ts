@@ -1,12 +1,21 @@
-import { Controller, Get, Param, ParseEnumPipe } from '@nestjs/common';
 import {
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AgreementType } from '../../generated/prisma/client';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AgreementsService } from './agreements.service';
 import { AgreementDocumentEntity } from './entities/agreement-document.entity';
 
@@ -16,6 +25,8 @@ export class AgreementsController {
   constructor(private readonly agreementsService: AgreementsService) {}
 
   @Get(':type')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '현재 유효한 약관 조회' })
   @ApiParam({
     name: 'type',
@@ -28,6 +39,9 @@ export class AgreementsController {
   })
   @ApiNotFoundResponse({
     description: '현재 유효한 약관 없음',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
   })
   getActiveAgreement(
     @Param('type', new ParseEnumPipe(AgreementType)) type: AgreementType,
