@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { ValidationPipe } from '@nestjs/common';
@@ -41,13 +42,16 @@ const isValidMetricsBasicAuth = (
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // 로거 준비 전 발생하는 시작 로그가 유실되지 않도록 버퍼에 저장
     bufferLogs: true,
   });
 
   // NestJS 내장 Logger를 Winston으로 교체 (Loki로 로그 push 포함)
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
+
+  // Railway 프록시 뒤의 실제 클라이언트 IP를 request.ip로 기록할 수 있게 한다.
+  app.set('trust proxy', 1);
 
   app.use(
     helmet({

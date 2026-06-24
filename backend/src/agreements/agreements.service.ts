@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type {
   AgreementDocument,
   AgreementType,
 } from '../../generated/prisma/client';
+import { AgreementAction } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface AgreementStatusResponse {
@@ -12,6 +13,13 @@ export interface AgreementStatusResponse {
   title: string;
   required: boolean;
   agreed: boolean;
+}
+
+export interface AgreeAgreementsParams {
+  userId: string;
+  agreementDocumentIds: string[];
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 @Injectable()
@@ -26,6 +34,101 @@ export class AgreementsService {
     userId: string,
   ): Promise<AgreementStatusResponse[]> {
     const activeDocuments = await this.findActiveAgreementDocuments();
+    return this.createAgreementStatuses(userId, activeDocuments);
+  }
+
+  async hasAgreedAllRequiredAgreements(userId: string): Promise<boolean> {
+    const activeDocuments = await this.findActiveAgreementDocuments();
+    const requiredDocumentIds = activeDocuments
+      .filter((document) => document.required)
+      .map((document) => document.id);
+
+    if (requiredDocumentIds.length === 0) {
+      return true;
+    }
+
+    const agreements = await this.prisma.userAgreement.findMany({
+      where: {
+        userId,
+        documentId: {
+          in: requiredDocumentIds,
+        },
+        withdrawnAt: null,
+      },
+      select: {
+        documentId: true,
+      },
+    });
+    const agreedDocumentIds = new Set(
+      agreements.map((agreement) => agreement.documentId),
+    );
+
+    return requiredDocumentIds.every((documentId) =>
+      agreedDocumentIds.has(documentId),
+    );
+  }
+
+  async agreeAgreements(
+    params: AgreeAgreementsParams,
+  ): Promise<AgreementStatusResponse[]> {
+    const activeDocuments = await this.findActiveAgreementDocuments();
+    const activeDocumentIds = new Set(
+      activeDocuments.map((document) => document.id),
+    );
+    const invalidDocumentIds = params.agreementDocumentIds.filter(
+      (documentId) => !activeDocumentIds.has(documentId),
+    );
+
+    if (invalidDocumentIds.length > 0) {
+      throw new BadRequestException({
+        code: 'INVALID_AGREEMENT_DOCUMENT',
+        message: '현재 유효한 약관 문서만 동의할 수 있습니다.',
+        invalidDocumentIds,
+      });
+    }
+
+    const agreedAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const documentId of params.agreementDocumentIds) {
+        const agreement = await tx.userAgreement.upsert({
+          where: {
+            userId_documentId: {
+              userId: params.userId,
+              documentId,
+            },
+          },
+          update: {
+            agreedAt,
+            withdrawnAt: null,
+          },
+          create: {
+            userId: params.userId,
+            documentId,
+            agreedAt,
+          },
+        });
+
+        await tx.userAgreementEvent.create({
+          data: {
+            userId: params.userId,
+            agreementId: agreement.id,
+            documentId,
+            action: AgreementAction.AGREED,
+            ipAddress: params.ipAddress,
+            userAgent: params.userAgent,
+          },
+        });
+      }
+    });
+
+    return this.createAgreementStatuses(params.userId, activeDocuments);
+  }
+
+  private async createAgreementStatuses(
+    userId: string,
+    activeDocuments: AgreementDocument[],
+  ): Promise<AgreementStatusResponse[]> {
     const activeDocumentIds = activeDocuments.map((document) => document.id);
 
     if (activeDocumentIds.length === 0) {
