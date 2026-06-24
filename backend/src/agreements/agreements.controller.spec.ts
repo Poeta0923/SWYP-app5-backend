@@ -1,6 +1,11 @@
 import { RequestMethod } from '@nestjs/common';
-import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import {
+  GUARDS_METADATA,
+  METHOD_METADATA,
+  PATH_METADATA,
+} from '@nestjs/common/constants';
 import { AgreementType } from '../../generated/prisma/client';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AgreementsController } from './agreements.controller';
 import { AgreementsService } from './agreements.service';
 
@@ -37,6 +42,12 @@ describe('AgreementsController', () => {
         AgreementsController.prototype.getActiveAgreement,
       ),
     ).toBe(RequestMethod.GET);
+    expect(
+      Reflect.getMetadata(
+        GUARDS_METADATA,
+        AgreementsController.prototype.getActiveAgreement,
+      ),
+    ).toEqual([JwtAuthGuard]);
   });
 
   it('returns the active agreement for the requested type from the service', async () => {
