@@ -45,6 +45,9 @@ describe('AuthService', () => {
     getRefreshTokenTtlSeconds: jest.Mock;
     signAccessToken: jest.Mock;
   };
+  let agreementsService: {
+    getActiveAgreementStatuses: jest.Mock;
+  };
   let resolveTx: {
     account: {
       findUnique: jest.Mock;
@@ -186,12 +189,28 @@ describe('AuthService', () => {
       getRefreshTokenTtlSeconds: jest.fn().mockReturnValue(60 * 60 * 24 * 30),
       signAccessToken: jest.fn().mockReturnValue('access-token'),
     };
+    agreementsService = {
+      getActiveAgreementStatuses: jest.fn().mockImplementation(async () => {
+        callOrder.push('load-agreement-statuses');
+        return [
+          {
+            type: 'TERMS',
+            documentId: 'agreement-document-id',
+            version: '0.0.1',
+            title: '이용 약관 동의(필수)',
+            required: true,
+            agreed: false,
+          },
+        ];
+      }),
+    };
 
     service = new AuthService(
       prisma as never,
       googleAuthService as never,
       sessionService as never,
       tokenService as never,
+      agreementsService as never,
     );
   });
 
@@ -213,12 +232,26 @@ describe('AuthService', () => {
         role: user.role,
         isPremium: user.isPremium,
       },
+      agreements: [
+        {
+          type: 'TERMS',
+          documentId: 'agreement-document-id',
+          version: '0.0.1',
+          title: '이용 약관 동의(필수)',
+          required: true,
+          agreed: false,
+        },
+      ],
       isNewUser: false,
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
     });
+    expect(agreementsService.getActiveAgreementStatuses).toHaveBeenCalledWith(
+      user.id,
+    );
     expect(callOrder).toEqual([
       'resolve-user-transaction',
+      'load-agreement-statuses',
       'set-pending-session',
       'activate-session-transaction',
       'revoke-refresh-tokens',
@@ -275,10 +308,23 @@ describe('AuthService', () => {
         role: newUser.role,
         isPremium: newUser.isPremium,
       },
+      agreements: [
+        {
+          type: 'TERMS',
+          documentId: 'agreement-document-id',
+          version: '0.0.1',
+          title: '이용 약관 동의(필수)',
+          required: true,
+          agreed: false,
+        },
+      ],
       isNewUser: true,
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
     });
+    expect(agreementsService.getActiveAgreementStatuses).toHaveBeenCalledWith(
+      newUser.id,
+    );
   });
 
   it('does not mutate session state when pending Redis session activation fails', async () => {
@@ -291,6 +337,21 @@ describe('AuthService', () => {
     ).rejects.toThrow('redis unavailable');
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(activateTx.refreshToken.updateMany).not.toHaveBeenCalled();
+    expect(sessionService.promoteActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate session state when loading agreement statuses fails', async () => {
+    agreementsService.getActiveAgreementStatuses.mockRejectedValueOnce(
+      new Error('agreement query failed'),
+    );
+
+    await expect(
+      service.loginWithGoogle({ idToken: 'google-id-token' }),
+    ).rejects.toThrow('agreement query failed');
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(sessionService.setPendingActiveSession).not.toHaveBeenCalled();
     expect(activateTx.refreshToken.updateMany).not.toHaveBeenCalled();
     expect(sessionService.promoteActiveSession).not.toHaveBeenCalled();
   });

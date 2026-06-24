@@ -43,6 +43,12 @@ export class AgreementDocumentEntity implements AgreementDocument {
   contentHash: string;
 
   @ApiProperty({
+    example: true,
+    description: '필수 동의 여부',
+  })
+  required: boolean;
+
+  @ApiProperty({
     example: '2026-06-24T00:00:00.000Z',
     description: '약관 발효 시각',
   })
