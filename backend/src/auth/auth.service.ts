@@ -76,6 +76,9 @@ export class AuthService {
     const expiresAt = this.tokenService.createRefreshTokenExpiresAt();
     const refreshTokenTtlSeconds =
       this.tokenService.getRefreshTokenTtlSeconds();
+    const agreements = await this.agreementsService.getActiveAgreementStatuses(
+      resolvedUser.user.id,
+    );
 
     // Redis set을 DB 세션 변경보다 먼저 수행해, Redis 장애가 기존 세션을 깨뜨리지 않게 한다.
     await this.sessionService.setPendingActiveSession(
@@ -95,9 +98,6 @@ export class AuthService {
       activatedUser.id,
       familyId,
       refreshTokenTtlSeconds,
-    );
-    const agreements = await this.agreementsService.getActiveAgreementStatuses(
-      activatedUser.id,
     );
 
     return {

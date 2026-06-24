@@ -190,16 +190,19 @@ describe('AuthService', () => {
       signAccessToken: jest.fn().mockReturnValue('access-token'),
     };
     agreementsService = {
-      getActiveAgreementStatuses: jest.fn().mockResolvedValue([
-        {
-          type: 'TERMS',
-          documentId: 'agreement-document-id',
-          version: '0.0.1',
-          title: '이용 약관 동의(필수)',
-          required: true,
-          agreed: false,
-        },
-      ]),
+      getActiveAgreementStatuses: jest.fn().mockImplementation(async () => {
+        callOrder.push('load-agreement-statuses');
+        return [
+          {
+            type: 'TERMS',
+            documentId: 'agreement-document-id',
+            version: '0.0.1',
+            title: '이용 약관 동의(필수)',
+            required: true,
+            agreed: false,
+          },
+        ];
+      }),
     };
 
     service = new AuthService(
@@ -248,6 +251,7 @@ describe('AuthService', () => {
     );
     expect(callOrder).toEqual([
       'resolve-user-transaction',
+      'load-agreement-statuses',
       'set-pending-session',
       'activate-session-transaction',
       'revoke-refresh-tokens',
@@ -333,6 +337,21 @@ describe('AuthService', () => {
     ).rejects.toThrow('redis unavailable');
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(activateTx.refreshToken.updateMany).not.toHaveBeenCalled();
+    expect(sessionService.promoteActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate session state when loading agreement statuses fails', async () => {
+    agreementsService.getActiveAgreementStatuses.mockRejectedValueOnce(
+      new Error('agreement query failed'),
+    );
+
+    await expect(
+      service.loginWithGoogle({ idToken: 'google-id-token' }),
+    ).rejects.toThrow('agreement query failed');
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(sessionService.setPendingActiveSession).not.toHaveBeenCalled();
     expect(activateTx.refreshToken.updateMany).not.toHaveBeenCalled();
     expect(sessionService.promoteActiveSession).not.toHaveBeenCalled();
   });
