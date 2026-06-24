@@ -11,7 +11,7 @@ export class AgreementStatusEntity implements AgreementStatusResponse {
   type: AgreementType;
 
   @ApiProperty({
-    example: 'test-agreement-terms-001',
+    example: 'clx0000000000000000000001',
     description: '약관 문서 ID',
   })
   documentId: string;
