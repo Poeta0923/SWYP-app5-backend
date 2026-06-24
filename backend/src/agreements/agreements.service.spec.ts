@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 import { AgreementAction, AgreementType } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgreementsService } from './agreements.service';
@@ -412,12 +412,19 @@ describe('AgreementsService', () => {
       },
     ]);
 
-    await expect(
-      service.agreeAgreements({
-        userId: 'user-1',
-        agreementDocumentIds: ['unknown-document-id'],
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const promise = service.agreeAgreements({
+      userId: 'user-1',
+      agreementDocumentIds: ['unknown-document-id'],
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(ConflictException);
+    await expect(promise).rejects.toMatchObject({
+      response: {
+        code: 'AGREEMENTS_CHANGED',
+        message: '약관이 변경되었습니다. 다시 로그인해주세요.',
+        invalidDocumentIds: ['unknown-document-id'],
+      },
+    });
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.userAgreement.upsert).not.toHaveBeenCalled();

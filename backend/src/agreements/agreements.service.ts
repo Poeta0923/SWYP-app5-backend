@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import type {
   AgreementDocument,
   AgreementType,
@@ -80,9 +80,9 @@ export class AgreementsService {
     );
 
     if (invalidDocumentIds.length > 0) {
-      throw new BadRequestException({
-        code: 'INVALID_AGREEMENT_DOCUMENT',
-        message: '현재 유효한 약관 문서만 동의할 수 있습니다.',
+      throw new ConflictException({
+        code: 'AGREEMENTS_CHANGED',
+        message: '약관이 변경되었습니다. 다시 로그인해주세요.',
         invalidDocumentIds,
       });
     }
