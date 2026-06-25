@@ -123,6 +123,12 @@ export class PersonListItemEntity implements PersonListItemResponse {
     nullable: true,
   })
   image: string | null;
+
+  @ApiProperty({
+    example: false,
+    description: '중요 인물 여부',
+  })
+  isImportant: boolean;
 }
 
 export class PersonEntity implements CreatedPersonResponse {

@@ -186,11 +186,13 @@ describe('PeopleService', () => {
         name: '홍길동',
         phoneNumber: '010-1234-5678',
         image: 'https://cdn.example.com/profile.png',
+        isImportant: true,
       },
       {
         name: '김영희',
         phoneNumber: null,
         image: null,
+        isImportant: false,
       },
     ]);
 
@@ -199,11 +201,13 @@ describe('PeopleService', () => {
         name: '홍길동',
         phoneNumber: '010-1234-5678',
         image: 'https://cdn.example.com/profile.png',
+        isImportant: true,
       },
       {
         name: '김영희',
         phoneNumber: null,
         image: null,
+        isImportant: false,
       },
     ]);
 
@@ -213,6 +217,7 @@ describe('PeopleService', () => {
         name: true,
         phoneNumber: true,
         image: true,
+        isImportant: true,
       },
       orderBy: { createdAt: Prisma.SortOrder.desc },
     });

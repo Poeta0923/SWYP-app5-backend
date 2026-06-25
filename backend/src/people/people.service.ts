@@ -27,6 +27,7 @@ export interface PersonListItemResponse {
   name: string;
   phoneNumber: string | null;
   image: string | null;
+  isImportant: boolean;
 }
 
 export interface PersonImageFile {
@@ -225,6 +226,7 @@ export class PeopleService {
         name: true,
         phoneNumber: true,
         image: true,
+        isImportant: true,
       },
       orderBy: { createdAt: Prisma.SortOrder.desc },
     });
