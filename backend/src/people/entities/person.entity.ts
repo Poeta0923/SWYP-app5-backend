@@ -3,7 +3,10 @@ import {
   MediaFileType,
   MediaFileUsage,
 } from '../../../generated/prisma/client';
-import type { CreatedPersonResponse } from '../people.service';
+import type {
+  CreatedPersonResponse,
+  PersonListItemResponse,
+} from '../people.service';
 
 export class PersonMediaFileEntity {
   @ApiProperty({
@@ -98,6 +101,34 @@ export class PersonExtraContactEntity {
     description: '추가 정보 내용',
   })
   content: string;
+}
+
+export class PersonListItemEntity implements PersonListItemResponse {
+  @ApiProperty({
+    example: '홍길동',
+    description: '이름',
+  })
+  name: string;
+
+  @ApiPropertyOptional({
+    example: '010-1234-5678',
+    description: '전화번호',
+    nullable: true,
+  })
+  phoneNumber: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.example.com/people/user-1/profiles/profile.png',
+    description: '프로필 이미지 URL',
+    nullable: true,
+  })
+  image: string | null;
+
+  @ApiProperty({
+    example: false,
+    description: '중요 인물 여부',
+  })
+  isImportant: boolean;
 }
 
 export class PersonEntity implements CreatedPersonResponse {

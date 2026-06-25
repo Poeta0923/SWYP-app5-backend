@@ -24,6 +24,7 @@ interface TestTransactionClient {
   relationship: CategoryDelegateMock;
   person: {
     create: jest.Mock;
+    findMany: jest.Mock;
   };
   mediaFile: {
     create: jest.Mock;
@@ -92,6 +93,7 @@ describe('PeopleService', () => {
       },
       person: {
         create: jest.fn(),
+        findMany: jest.fn(),
       },
       mediaFile: {
         create: jest.fn(),
@@ -175,6 +177,49 @@ describe('PeopleService', () => {
       where: { userId: 'user-1' },
       select: { name: true },
       orderBy: { name: Prisma.SortOrder.asc },
+    });
+  });
+
+  it('returns current user people list with only profile fields', async () => {
+    prisma.person.findMany.mockResolvedValue([
+      {
+        name: '홍길동',
+        phoneNumber: '010-1234-5678',
+        image: 'https://cdn.example.com/profile.png',
+        isImportant: true,
+      },
+      {
+        name: '김영희',
+        phoneNumber: null,
+        image: null,
+        isImportant: false,
+      },
+    ]);
+
+    await expect(service.getPeople('user-1')).resolves.toEqual([
+      {
+        name: '홍길동',
+        phoneNumber: '010-1234-5678',
+        image: 'https://cdn.example.com/profile.png',
+        isImportant: true,
+      },
+      {
+        name: '김영희',
+        phoneNumber: null,
+        image: null,
+        isImportant: false,
+      },
+    ]);
+
+    expect(prisma.person.findMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      select: {
+        name: true,
+        phoneNumber: true,
+        image: true,
+        isImportant: true,
+      },
+      orderBy: { createdAt: Prisma.SortOrder.desc },
     });
   });
 
