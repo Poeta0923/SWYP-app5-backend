@@ -23,6 +23,12 @@ export interface PersonCategoryNamesResponse {
   relationships: string[];
 }
 
+export interface PersonListItemResponse {
+  name: string;
+  phoneNumber: string | null;
+  image: string | null;
+}
+
 export interface PersonImageFile {
   buffer: Buffer;
   mimetype: string;
@@ -210,6 +216,18 @@ export class PeopleService {
       positions: positions.map(({ name }) => name),
       relationships: relationships.map(({ name }) => name),
     };
+  }
+
+  async getPeople(userId: string): Promise<PersonListItemResponse[]> {
+    return this.prisma.person.findMany({
+      where: { userId },
+      select: {
+        name: true,
+        phoneNumber: true,
+        image: true,
+      },
+      orderBy: { createdAt: Prisma.SortOrder.desc },
+    });
   }
 
   private async ensureDefaultCategories(userId: string): Promise<void> {

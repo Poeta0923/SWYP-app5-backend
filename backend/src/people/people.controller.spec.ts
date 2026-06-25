@@ -11,6 +11,7 @@ import { PeopleService } from './people.service';
 describe('PeopleController', () => {
   let peopleService: {
     createPeople: jest.Mock;
+    getPeople: jest.Mock;
     getCategoryNames: jest.Mock;
   };
   let controller: PeopleController;
@@ -18,6 +19,7 @@ describe('PeopleController', () => {
   beforeEach(() => {
     peopleService = {
       createPeople: jest.fn().mockResolvedValue([]),
+      getPeople: jest.fn().mockResolvedValue([]),
       getCategoryNames: jest.fn().mockResolvedValue({
         jobs: [],
         companies: [],
@@ -44,6 +46,29 @@ describe('PeopleController', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, createPeopleHandler)).toEqual([
       JwtAuthGuard,
     ]);
+  });
+
+  it('registers GET /people behind JwtAuthGuard and fetches current user people', async () => {
+    const getPeopleHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'getPeople',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(controller.getPeople(currentUser)).resolves.toEqual([]);
+
+    expect(Reflect.getMetadata(PATH_METADATA, getPeopleHandler)).toBe('/');
+    expect(Reflect.getMetadata(METHOD_METADATA, getPeopleHandler)).toBe(
+      RequestMethod.GET,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, getPeopleHandler)).toEqual([
+      JwtAuthGuard,
+    ]);
+    expect(peopleService.getPeople).toHaveBeenCalledWith('user-1');
   });
 
   it('parses people JSON and maps indexed files to service input', async () => {

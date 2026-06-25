@@ -27,7 +27,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { CreatePersonItemDto } from './dto/create-person-item.dto';
 import { PersonCategoryNamesEntity } from './entities/person-category-names.entity';
-import { PersonEntity } from './entities/person.entity';
+import { PersonEntity, PersonListItemEntity } from './entities/person.entity';
 import {
   type PersonCreateFiles,
   type PersonCreateFilesByIndex,
@@ -177,6 +177,22 @@ export class PeopleController {
       people,
       filesByIndex,
     );
+  }
+
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '사용자 인물 목록 조회' })
+  @ApiOkResponse({
+    description: '현재 사용자의 인물 이름, 전화번호, 프로필 이미지 목록 조회 성공',
+    type: PersonListItemEntity,
+    isArray: true,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  getPeople(@CurrentUser() currentUser: JwtAccessPayload) {
+    return this.peopleService.getPeople(currentUser.sub);
   }
 
   @Get('categories')
