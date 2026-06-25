@@ -1,5 +1,10 @@
-import { Prisma } from '../../generated/prisma/client';
+import {
+  MediaFileType,
+  MediaFileUsage,
+  Prisma,
+} from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { S3Service } from '../s3/s3.service';
 import {
   DEFAULT_JOB_NAMES,
   DEFAULT_POSITION_NAMES,
@@ -7,35 +12,70 @@ import {
 } from './people.constants';
 import { PeopleService } from './people.service';
 
+interface CategoryDelegateMock {
+  createMany: jest.Mock;
+  findMany: jest.Mock;
+}
+
+interface TestTransactionClient {
+  job: CategoryDelegateMock;
+  company: CategoryDelegateMock;
+  position: CategoryDelegateMock;
+  relationship: CategoryDelegateMock;
+  person: {
+    create: jest.Mock;
+  };
+  mediaFile: {
+    create: jest.Mock;
+  };
+  businessCard: {
+    create: jest.Mock;
+  };
+}
+
+interface PrismaMock extends TestTransactionClient {
+  $transaction: jest.Mock;
+}
+
+type TestTransactionInput =
+  | unknown[]
+  | ((tx: TestTransactionClient) => unknown);
+
 describe('PeopleService', () => {
-  let prisma: {
-    $transaction: jest.Mock;
-    job: {
-      createMany: jest.Mock;
-      findMany: jest.Mock;
-    };
-    company: {
-      findMany: jest.Mock;
-    };
-    position: {
-      createMany: jest.Mock;
-      findMany: jest.Mock;
-    };
-    relationship: {
-      createMany: jest.Mock;
-      findMany: jest.Mock;
-    };
+  let prisma: PrismaMock;
+  let s3Service: {
+    uploadFile: jest.Mock;
+    deleteFile: jest.Mock;
   };
   let service: PeopleService;
 
   beforeEach(() => {
     prisma = {
-      $transaction: jest.fn().mockResolvedValue([]),
+      $transaction: jest
+        .fn()
+        .mockImplementation((input: TestTransactionInput) => {
+          if (Array.isArray(input)) {
+            return Promise.resolve(input);
+          }
+
+          const transactionClient: TestTransactionClient = {
+            job: prisma.job,
+            company: prisma.company,
+            position: prisma.position,
+            relationship: prisma.relationship,
+            person: prisma.person,
+            mediaFile: prisma.mediaFile,
+            businessCard: prisma.businessCard,
+          };
+
+          return input(transactionClient);
+        }),
       job: {
         createMany: jest.fn(),
         findMany: jest.fn(),
       },
       company: {
+        createMany: jest.fn(),
         findMany: jest.fn(),
       },
       position: {
@@ -46,8 +86,24 @@ describe('PeopleService', () => {
         createMany: jest.fn(),
         findMany: jest.fn(),
       },
+      person: {
+        create: jest.fn(),
+      },
+      mediaFile: {
+        create: jest.fn(),
+      },
+      businessCard: {
+        create: jest.fn(),
+      },
     };
-    service = new PeopleService(prisma as unknown as PrismaService);
+    s3Service = {
+      uploadFile: jest.fn(),
+      deleteFile: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new PeopleService(
+      prisma as unknown as PrismaService,
+      s3Service as unknown as S3Service,
+    );
   });
 
   it('ensures default categories and returns category names from the database', async () => {
@@ -113,5 +169,341 @@ describe('PeopleService', () => {
       select: { name: true },
       orderBy: { name: Prisma.SortOrder.asc },
     });
+  });
+
+  it('creates people in one transaction and stores missing category names', async () => {
+    const firstPerson = {
+      id: 'person-1',
+      userId: 'user-1',
+      name: '홍길동',
+      image: null,
+      birthDate: new Date('1990-01-01'),
+      isImportant: true,
+      phoneNumber: '010-1234-5678',
+      job: '개발/IT',
+      company: '토스',
+      position: '과장',
+      relationship: '동료',
+      personality: '꼼꼼함',
+      birthdayNotificationEnabled: true,
+      scheduleNotificationEnabled: false,
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-25T00:00:00.000Z'),
+    };
+    const secondPerson = {
+      ...firstPerson,
+      id: 'person-2',
+      name: '김영희',
+      birthDate: null,
+      isImportant: false,
+      phoneNumber: null,
+      job: null,
+      company: '카카오',
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      scheduleNotificationEnabled: true,
+    };
+    prisma.person.create
+      .mockResolvedValueOnce(firstPerson)
+      .mockResolvedValueOnce(secondPerson);
+
+    await expect(
+      service.createPeople(
+        'user-1',
+        [
+          {
+            name: '홍길동',
+            birthDate: '1990-01-01',
+            isImportant: true,
+            phoneNumber: '010-1234-5678',
+            job: '개발/IT',
+            company: '토스',
+            position: '과장',
+            relationship: '동료',
+            personality: '꼼꼼함',
+            birthdayNotificationEnabled: true,
+            scheduleNotificationEnabled: false,
+          },
+          {
+            name: '김영희',
+            company: '카카오',
+            scheduleNotificationEnabled: true,
+          },
+        ],
+        new Map(),
+      ),
+    ).resolves.toEqual([
+      {
+        ...firstPerson,
+        businessCards: [],
+      },
+      {
+        ...secondPerson,
+        businessCards: [],
+      },
+    ]);
+
+    expect(prisma.job.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', name: '개발/IT' }],
+      skipDuplicates: true,
+    });
+    expect(prisma.company.createMany).toHaveBeenCalledWith({
+      data: [
+        { userId: 'user-1', name: '토스' },
+        { userId: 'user-1', name: '카카오' },
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.position.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', name: '과장' }],
+      skipDuplicates: true,
+    });
+    expect(prisma.relationship.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', name: '동료' }],
+      skipDuplicates: true,
+    });
+    expect(prisma.person.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        userId: 'user-1',
+        name: '홍길동',
+        image: undefined,
+        birthDate: new Date('1990-01-01'),
+        isImportant: true,
+        phoneNumber: '010-1234-5678',
+        job: '개발/IT',
+        company: '토스',
+        position: '과장',
+        relationship: '동료',
+        personality: '꼼꼼함',
+        birthdayNotificationEnabled: true,
+        scheduleNotificationEnabled: false,
+      },
+    });
+    expect(prisma.person.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        userId: 'user-1',
+        name: '김영희',
+        image: undefined,
+        birthDate: undefined,
+        isImportant: false,
+        phoneNumber: undefined,
+        job: undefined,
+        company: '카카오',
+        position: undefined,
+        relationship: undefined,
+        personality: undefined,
+        birthdayNotificationEnabled: false,
+        scheduleNotificationEnabled: true,
+      },
+    });
+  });
+
+  it('uploads profile and business card images, then links media files', async () => {
+    const profileFile = {
+      buffer: Buffer.from('profile'),
+      mimetype: 'image/png',
+      originalname: 'profile.png',
+      size: 7,
+    };
+    const frontFile = {
+      buffer: Buffer.from('front'),
+      mimetype: 'image/jpeg',
+      originalname: 'front.jpg',
+      size: 5,
+    };
+    const backFile = {
+      buffer: Buffer.from('back'),
+      mimetype: 'image/jpeg',
+      originalname: 'back.jpg',
+      size: 4,
+    };
+    s3Service.uploadFile
+      .mockResolvedValueOnce({
+        bucket: 'bucket',
+        key: 'profiles/profile.png',
+        url: 'https://cdn.example.com/profile.png',
+        contentType: 'image/png',
+        size: 7,
+      })
+      .mockResolvedValueOnce({
+        bucket: 'bucket',
+        key: 'cards/front.jpg',
+        url: 'https://cdn.example.com/front.jpg',
+        contentType: 'image/jpeg',
+        size: 5,
+      })
+      .mockResolvedValueOnce({
+        bucket: 'bucket',
+        key: 'cards/back.jpg',
+        url: 'https://cdn.example.com/back.jpg',
+        contentType: 'image/jpeg',
+        size: 4,
+      });
+    const person = {
+      id: 'person-1',
+      userId: 'user-1',
+      name: '홍길동',
+      image: 'https://cdn.example.com/profile.png',
+      birthDate: null,
+      isImportant: false,
+      phoneNumber: null,
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      scheduleNotificationEnabled: false,
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-25T00:00:00.000Z'),
+    };
+    prisma.person.create.mockResolvedValue(person);
+    prisma.mediaFile.create
+      .mockResolvedValueOnce({ id: 'front-media-id' })
+      .mockResolvedValueOnce({ id: 'back-media-id' });
+    const businessCard = {
+      id: 'business-card-1',
+      userId: 'user-1',
+      personId: 'person-1',
+      frontImageFileId: 'front-media-id',
+      backImageFileId: 'back-media-id',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-25T00:00:00.000Z'),
+      frontImageFile: {
+        id: 'front-media-id',
+        userId: 'user-1',
+        type: MediaFileType.IMAGE,
+        usage: MediaFileUsage.BUSINESS_CARD_FRONT,
+        bucket: 'bucket',
+        s3Key: 'cards/front.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 5,
+        originalName: 'front.jpg',
+        deletedAt: null,
+        createdAt: new Date('2026-06-25T00:00:00.000Z'),
+        updatedAt: new Date('2026-06-25T00:00:00.000Z'),
+      },
+      backImageFile: {
+        id: 'back-media-id',
+        userId: 'user-1',
+        type: MediaFileType.IMAGE,
+        usage: MediaFileUsage.BUSINESS_CARD_BACK,
+        bucket: 'bucket',
+        s3Key: 'cards/back.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 4,
+        originalName: 'back.jpg',
+        deletedAt: null,
+        createdAt: new Date('2026-06-25T00:00:00.000Z'),
+        updatedAt: new Date('2026-06-25T00:00:00.000Z'),
+      },
+    };
+    prisma.businessCard.create.mockResolvedValue(businessCard);
+
+    await expect(
+      service.createPeople(
+        'user-1',
+        [{ name: '홍길동' }],
+        new Map([
+          [
+            0,
+            {
+              image: profileFile,
+              businessCardFrontImage: frontFile,
+              businessCardBackImage: backFile,
+            },
+          ],
+        ]),
+      ),
+    ).resolves.toEqual([
+      {
+        ...person,
+        businessCards: [businessCard],
+      },
+    ]);
+
+    expect(s3Service.uploadFile).toHaveBeenNthCalledWith(1, {
+      body: profileFile.buffer,
+      contentType: 'image/png',
+      originalName: 'profile.png',
+      prefix: 'people/user-1/profiles',
+    });
+    const personCreateCalls = prisma.person.create.mock.calls as [
+      { data: { image?: string } },
+    ][];
+    expect(personCreateCalls[0][0].data.image).toBe(
+      'https://cdn.example.com/profile.png',
+    );
+    expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        userId: 'user-1',
+        type: MediaFileType.IMAGE,
+        usage: MediaFileUsage.BUSINESS_CARD_FRONT,
+        bucket: 'bucket',
+        s3Key: 'cards/front.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 5,
+        originalName: 'front.jpg',
+      },
+    });
+    expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        userId: 'user-1',
+        type: MediaFileType.IMAGE,
+        usage: MediaFileUsage.BUSINESS_CARD_BACK,
+        bucket: 'bucket',
+        s3Key: 'cards/back.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 4,
+        originalName: 'back.jpg',
+      },
+    });
+    expect(prisma.businessCard.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        personId: 'person-1',
+        frontImageFileId: 'front-media-id',
+        backImageFileId: 'back-media-id',
+      },
+      include: {
+        frontImageFile: true,
+        backImageFile: true,
+      },
+    });
+  });
+
+  it('deletes uploaded S3 files when database creation fails', async () => {
+    s3Service.uploadFile.mockResolvedValueOnce({
+      bucket: 'bucket',
+      key: 'profiles/profile.png',
+      url: 'https://cdn.example.com/profile.png',
+      contentType: 'image/png',
+      size: 7,
+    });
+    prisma.person.create.mockRejectedValue(new Error('database failed'));
+
+    await expect(
+      service.createPeople(
+        'user-1',
+        [{ name: '홍길동' }],
+        new Map([
+          [
+            0,
+            {
+              image: {
+                buffer: Buffer.from('profile'),
+                mimetype: 'image/png',
+                originalname: 'profile.png',
+                size: 7,
+              },
+            },
+          ],
+        ]),
+      ),
+    ).rejects.toThrow('database failed');
+
+    expect(s3Service.deleteFile).toHaveBeenCalledWith('profiles/profile.png');
   });
 });
