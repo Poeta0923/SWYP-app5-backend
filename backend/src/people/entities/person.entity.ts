@@ -124,8 +124,9 @@ export class PersonListItemEntity implements PersonListItemResponse {
   phoneNumber: string | null;
 
   @ApiPropertyOptional({
-    example: 'https://cdn.example.com/people/user-1/profiles/profile.png',
-    description: '프로필 이미지 URL',
+    example:
+      'https://cdn.example.com/people/user-1/profiles/profile.png?Expires=...',
+    description: '프로필 이미지 CloudFront signed URL',
     nullable: true,
   })
   image: string | null;
@@ -151,8 +152,9 @@ export class PersonEntity implements CreatedPersonResponse {
   name: string;
 
   @ApiPropertyOptional({
-    example: 'https://cdn.example.com/people/user-1/profiles/profile.png',
-    description: '프로필 이미지 URL',
+    example:
+      'https://cdn.example.com/people/user-1/profiles/profile.png?Expires=...',
+    description: '프로필 이미지 CloudFront signed URL',
     nullable: true,
   })
   image: string | null;
