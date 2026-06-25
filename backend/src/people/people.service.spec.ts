@@ -183,12 +183,14 @@ describe('PeopleService', () => {
   it('returns current user people list with only profile fields', async () => {
     prisma.person.findMany.mockResolvedValue([
       {
+        id: 'person-1',
         name: '홍길동',
         phoneNumber: '010-1234-5678',
         image: 'https://cdn.example.com/profile.png',
         isImportant: true,
       },
       {
+        id: 'person-2',
         name: '김영희',
         phoneNumber: null,
         image: null,
@@ -198,12 +200,14 @@ describe('PeopleService', () => {
 
     await expect(service.getPeople('user-1')).resolves.toEqual([
       {
+        id: 'person-1',
         name: '홍길동',
         phoneNumber: '010-1234-5678',
         image: 'https://cdn.example.com/profile.png',
         isImportant: true,
       },
       {
+        id: 'person-2',
         name: '김영희',
         phoneNumber: null,
         image: null,
@@ -214,6 +218,7 @@ describe('PeopleService', () => {
     expect(prisma.person.findMany).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
       select: {
+        id: true,
         name: true,
         phoneNumber: true,
         image: true,

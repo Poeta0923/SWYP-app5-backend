@@ -105,6 +105,12 @@ export class PersonExtraContactEntity {
 
 export class PersonListItemEntity implements PersonListItemResponse {
   @ApiProperty({
+    example: 'clx0000000000000000000003',
+    description: '인물 ID',
+  })
+  id: string;
+
+  @ApiProperty({
     example: '홍길동',
     description: '이름',
   })

@@ -24,6 +24,7 @@ export interface PersonCategoryNamesResponse {
 }
 
 export interface PersonListItemResponse {
+  id: string;
   name: string;
   phoneNumber: string | null;
   image: string | null;
@@ -223,6 +224,7 @@ export class PeopleService {
     return this.prisma.person.findMany({
       where: { userId },
       select: {
+        id: true,
         name: true,
         phoneNumber: true,
         image: true,
