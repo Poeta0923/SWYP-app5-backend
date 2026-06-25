@@ -15,6 +15,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -22,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { RequiredAgreementsGuard } from '../agreements/required-agreements.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
@@ -56,7 +58,7 @@ export class PeopleController {
   constructor(private readonly peopleService: PeopleService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
   @UseInterceptors(
     AnyFilesInterceptor({
       limits: {
@@ -164,6 +166,9 @@ export class PeopleController {
   @ApiUnauthorizedResponse({
     description: 'Access token 검증 실패 또는 세션 만료',
   })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
   createPeople(
     @CurrentUser() currentUser: JwtAccessPayload,
     @Body('people') peopleJson: string | undefined,
@@ -180,7 +185,7 @@ export class PeopleController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '사용자 인물 목록 조회' })
   @ApiOkResponse({
@@ -192,12 +197,15 @@ export class PeopleController {
   @ApiUnauthorizedResponse({
     description: 'Access token 검증 실패 또는 세션 만료',
   })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
   getPeople(@CurrentUser() currentUser: JwtAccessPayload) {
     return this.peopleService.getPeople(currentUser.sub);
   }
 
   @Get('categories')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '인물 등록용 카테고리 이름 목록 조회' })
   @ApiOkResponse({
@@ -206,6 +214,9 @@ export class PeopleController {
   })
   @ApiUnauthorizedResponse({
     description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
   })
   getCategoryNames(@CurrentUser() currentUser: JwtAccessPayload) {
     return this.peopleService.getCategoryNames(currentUser.sub);

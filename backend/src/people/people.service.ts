@@ -50,7 +50,7 @@ export interface CreatedPersonResponse {
   id: string;
   name: string;
   image: string | null;
-  birthDate: Date | null;
+  birthDate: string | null;
   isImportant: boolean;
   phoneNumber: string | null;
   job: string | null;
@@ -69,6 +69,7 @@ export interface CreatedPersonResponse {
     id: string;
     frontImageFile: {
       id: string;
+      url: string;
       type: MediaFileType;
       usage: MediaFileUsage;
       bucket: string;
@@ -79,6 +80,7 @@ export interface CreatedPersonResponse {
     } | null;
     backImageFile: {
       id: string;
+      url: string;
       type: MediaFileType;
       usage: MediaFileUsage;
       bucket: string;
@@ -103,6 +105,23 @@ interface UploadedPersonFiles {
   businessCardFrontImage?: UploadedPersonStorageFile;
   businessCardBackImage?: UploadedPersonStorageFile;
 }
+
+type BusinessCardWithMediaFiles = {
+  id: string;
+  frontImageFile: MediaFileResponseSource | null;
+  backImageFile: MediaFileResponseSource | null;
+};
+
+type MediaFileResponseSource = {
+  id: string;
+  type: MediaFileType;
+  usage: MediaFileUsage;
+  bucket: string;
+  s3Key: string;
+  contentType: string;
+  sizeBytes: number;
+  originalName: string | null;
+};
 
 @Injectable()
 export class PeopleService {
@@ -186,9 +205,12 @@ export class PeopleService {
 
           createdPeople.push({
             ...createdPerson,
+            birthDate: this.toDateOnlyString(createdPerson.birthDate),
             image: this.toSignedImageUrl(profileImageFile),
             extraContacts,
-            businessCards: businessCard ? [businessCard] : [],
+            businessCards: businessCard
+              ? [this.toBusinessCardResponse(businessCard)]
+              : [],
           });
         }
 
@@ -485,6 +507,34 @@ export class PeopleService {
     imageFile: PersonProfileImageFile | null | undefined,
   ): string | null {
     return imageFile ? this.s3Service.getSignedUrl(imageFile.s3Key) : null;
+  }
+
+  private toBusinessCardResponse(businessCard: BusinessCardWithMediaFiles) {
+    return {
+      id: businessCard.id,
+      frontImageFile: this.toMediaFileResponse(businessCard.frontImageFile),
+      backImageFile: this.toMediaFileResponse(businessCard.backImageFile),
+    };
+  }
+
+  private toMediaFileResponse(file: MediaFileResponseSource | null) {
+    return file
+      ? {
+          id: file.id,
+          url: this.s3Service.getSignedUrl(file.s3Key),
+          type: file.type,
+          usage: file.usage,
+          bucket: file.bucket,
+          s3Key: file.s3Key,
+          contentType: file.contentType,
+          sizeBytes: file.sizeBytes,
+          originalName: file.originalName,
+        }
+      : null;
+  }
+
+  private toDateOnlyString(date: Date | null): string | null {
+    return date ? date.toISOString().slice(0, 10) : null;
   }
 
   private toDate(date?: string): Date | undefined {
