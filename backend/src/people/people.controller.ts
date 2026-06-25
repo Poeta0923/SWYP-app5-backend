@@ -185,7 +185,7 @@ export class PeopleController {
   @ApiOperation({ summary: '사용자 인물 목록 조회' })
   @ApiOkResponse({
     description:
-      '현재 사용자의 인물 이름, 전화번호, 프로필 이미지, 중요 여부 목록 조회 성공',
+      '현재 사용자의 인물 ID, 이름, 전화번호, 프로필 이미지, 중요 여부 목록 조회 성공',
     type: PersonListItemEntity,
     isArray: true,
   })
