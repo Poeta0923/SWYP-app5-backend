@@ -4,6 +4,7 @@ import {
   METHOD_METADATA,
   PATH_METADATA,
 } from '@nestjs/common/constants';
+import { RequiredAgreementsGuard } from '../agreements/required-agreements.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PeopleController } from './people.controller';
 import { PeopleService } from './people.service';
@@ -32,7 +33,7 @@ describe('PeopleController', () => {
     );
   });
 
-  it('registers POST /people behind JwtAuthGuard', () => {
+  it('registers POST /people behind auth and required agreements guards', () => {
     const createPeopleHandler = Object.getOwnPropertyDescriptor(
       PeopleController.prototype,
       'createPeople',
@@ -45,10 +46,11 @@ describe('PeopleController', () => {
     );
     expect(Reflect.getMetadata(GUARDS_METADATA, createPeopleHandler)).toEqual([
       JwtAuthGuard,
+      RequiredAgreementsGuard,
     ]);
   });
 
-  it('registers GET /people behind JwtAuthGuard and fetches current user people', async () => {
+  it('registers GET /people behind auth and required agreements guards and fetches current user people', async () => {
     const getPeopleHandler = Object.getOwnPropertyDescriptor(
       PeopleController.prototype,
       'getPeople',
@@ -67,6 +69,7 @@ describe('PeopleController', () => {
     );
     expect(Reflect.getMetadata(GUARDS_METADATA, getPeopleHandler)).toEqual([
       JwtAuthGuard,
+      RequiredAgreementsGuard,
     ]);
     expect(peopleService.getPeople).toHaveBeenCalledWith('user-1');
   });

@@ -16,6 +16,13 @@ export class PersonMediaFileEntity {
   id: string;
 
   @ApiProperty({
+    example:
+      'https://cdn.example.com/people/user-1/business-cards/front/card.png?Expires=...',
+    description: '미디어 파일 CloudFront signed URL',
+  })
+  url: string;
+
+  @ApiProperty({
     enum: MediaFileType,
     example: MediaFileType.IMAGE,
     description: '미디어 파일 유형',
@@ -164,7 +171,7 @@ export class PersonEntity implements CreatedPersonResponse {
     description: '생년월일',
     nullable: true,
   })
-  birthDate: Date | null;
+  birthDate: string | null;
 
   @ApiProperty({
     example: false,

@@ -305,6 +305,7 @@ describe('PeopleService', () => {
     ).resolves.toEqual([
       {
         ...firstPerson,
+        birthDate: '1990-01-01',
         image: null,
         extraContacts: [],
         businessCards: [],
@@ -498,7 +499,33 @@ describe('PeopleService', () => {
         ...person,
         image: 'https://signed.example.com/profiles/profile.png',
         extraContacts: [],
-        businessCards: [businessCard],
+        businessCards: [
+          {
+            id: 'business-card-1',
+            frontImageFile: {
+              id: 'front-media-id',
+              url: 'https://signed.example.com/cards/front.jpg',
+              type: MediaFileType.IMAGE,
+              usage: MediaFileUsage.BUSINESS_CARD_FRONT,
+              bucket: 'bucket',
+              s3Key: 'cards/front.jpg',
+              contentType: 'image/jpeg',
+              sizeBytes: 5,
+              originalName: 'front.jpg',
+            },
+            backImageFile: {
+              id: 'back-media-id',
+              url: 'https://signed.example.com/cards/back.jpg',
+              type: MediaFileType.IMAGE,
+              usage: MediaFileUsage.BUSINESS_CARD_BACK,
+              bucket: 'bucket',
+              s3Key: 'cards/back.jpg',
+              contentType: 'image/jpeg',
+              sizeBytes: 4,
+              originalName: 'back.jpg',
+            },
+          },
+        ],
       },
     ]);
 
