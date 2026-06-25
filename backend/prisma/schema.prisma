@@ -38,10 +38,14 @@ model User {
   schedulePeople        SchedulePerson[]
   recordPeople          RecordPerson[]
   recordKeywords        RecordKeyword[]
+  companies             Company[]
+  recordMemos           RecordMemo[]
+  positions             Position[]
+  relationships         Relationship[]
+  jobs                  Job[]
 
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  recordMemos RecordMemo[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -167,6 +171,7 @@ model Person {
   phoneNumber                 String?           @map("phone_number")
   job                         String?
   company                     String?
+  position                    String?
   relationship                String?
   personality                 String?
   birthdayNotificationEnabled Boolean           @default(false) @map("birthday_notification_enabled")
@@ -185,6 +190,54 @@ model Person {
   @@unique([id, userId])
   @@index([userId])
   @@map("people")
+}
+
+model Job {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  name   String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("jobs")
+}
+
+model Company {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  name   String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("companies")
+}
+
+model Position {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  name   String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("positions")
+}
+
+model Relationship {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  name   String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("relationships")
 }
 
 model BusinessCard {

@@ -8,6 +8,7 @@ import { RedisModule } from './redis/redis.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { AgreementsModule } from './agreements/agreements.module';
+import { PeopleModule } from './people/people.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AgreementsModule } from './agreements/agreements.module';
     PrismaModule,
     AuthModule,
     AgreementsModule,
+    PeopleModule,
   ],
   controllers: [AppController],
   providers: [AppService],
