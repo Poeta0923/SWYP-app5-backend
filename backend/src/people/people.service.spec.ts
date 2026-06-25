@@ -50,6 +50,7 @@ describe('PeopleService', () => {
   let s3Service: {
     uploadFile: jest.Mock;
     deleteFile: jest.Mock;
+    getSignedUrl: jest.Mock;
   };
   let service: PeopleService;
 
@@ -108,6 +109,9 @@ describe('PeopleService', () => {
     s3Service = {
       uploadFile: jest.fn(),
       deleteFile: jest.fn().mockResolvedValue(undefined),
+      getSignedUrl: jest.fn(
+        (key: string) => `https://signed.example.com/${key}`,
+      ),
     };
     service = new PeopleService(
       prisma as unknown as PrismaService,
@@ -186,15 +190,17 @@ describe('PeopleService', () => {
         id: 'person-1',
         name: '홍길동',
         phoneNumber: '010-1234-5678',
-        image: 'https://cdn.example.com/profile.png',
         isImportant: true,
+        profileImageFile: {
+          s3Key: 'profiles/profile.png',
+        },
       },
       {
         id: 'person-2',
         name: '김영희',
         phoneNumber: null,
-        image: null,
         isImportant: false,
+        profileImageFile: null,
       },
     ]);
 
@@ -203,7 +209,7 @@ describe('PeopleService', () => {
         id: 'person-1',
         name: '홍길동',
         phoneNumber: '010-1234-5678',
-        image: 'https://cdn.example.com/profile.png',
+        image: 'https://signed.example.com/profiles/profile.png',
         isImportant: true,
       },
       {
@@ -221,11 +227,16 @@ describe('PeopleService', () => {
         id: true,
         name: true,
         phoneNumber: true,
-        image: true,
         isImportant: true,
+        profileImageFile: {
+          select: {
+            s3Key: true,
+          },
+        },
       },
       orderBy: { createdAt: Prisma.SortOrder.desc },
     });
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
   });
 
   it('creates people in one transaction and stores missing category names', async () => {
@@ -233,7 +244,7 @@ describe('PeopleService', () => {
       id: 'person-1',
       userId: 'user-1',
       name: '홍길동',
-      image: null,
+      profileImageFileId: null,
       birthDate: new Date('1990-01-01'),
       isImportant: true,
       phoneNumber: '010-1234-5678',
@@ -294,11 +305,13 @@ describe('PeopleService', () => {
     ).resolves.toEqual([
       {
         ...firstPerson,
+        image: null,
         extraContacts: [],
         businessCards: [],
       },
       {
         ...secondPerson,
+        image: null,
         extraContacts: [],
         businessCards: [],
       },
@@ -327,7 +340,7 @@ describe('PeopleService', () => {
       data: {
         userId: 'user-1',
         name: '홍길동',
-        image: undefined,
+        profileImageFileId: undefined,
         birthDate: new Date('1990-01-01'),
         isImportant: true,
         phoneNumber: '010-1234-5678',
@@ -344,7 +357,7 @@ describe('PeopleService', () => {
       data: {
         userId: 'user-1',
         name: '김영희',
-        image: undefined,
+        profileImageFileId: undefined,
         birthDate: undefined,
         isImportant: false,
         phoneNumber: undefined,
@@ -404,7 +417,7 @@ describe('PeopleService', () => {
       id: 'person-1',
       userId: 'user-1',
       name: '홍길동',
-      image: 'https://cdn.example.com/profile.png',
+      profileImageFileId: 'profile-media-id',
       birthDate: null,
       isImportant: false,
       phoneNumber: null,
@@ -420,6 +433,10 @@ describe('PeopleService', () => {
     };
     prisma.person.create.mockResolvedValue(person);
     prisma.mediaFile.create
+      .mockResolvedValueOnce({
+        id: 'profile-media-id',
+        s3Key: 'profiles/profile.png',
+      })
       .mockResolvedValueOnce({ id: 'front-media-id' })
       .mockResolvedValueOnce({ id: 'back-media-id' });
     const businessCard = {
@@ -479,6 +496,7 @@ describe('PeopleService', () => {
     ).resolves.toEqual([
       {
         ...person,
+        image: 'https://signed.example.com/profiles/profile.png',
         extraContacts: [],
         businessCards: [businessCard],
       },
@@ -490,13 +508,36 @@ describe('PeopleService', () => {
       originalName: 'profile.png',
       prefix: 'people/user-1/profiles',
     });
-    const personCreateCalls = prisma.person.create.mock.calls as [
-      { data: { image?: string } },
-    ][];
-    expect(personCreateCalls[0][0].data.image).toBe(
-      'https://cdn.example.com/profile.png',
-    );
     expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        userId: 'user-1',
+        type: MediaFileType.IMAGE,
+        usage: MediaFileUsage.PERSON_PROFILE,
+        bucket: 'bucket',
+        s3Key: 'profiles/profile.png',
+        contentType: 'image/png',
+        sizeBytes: 7,
+        originalName: 'profile.png',
+      },
+    });
+    expect(prisma.person.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        name: '홍길동',
+        profileImageFileId: 'profile-media-id',
+        birthDate: undefined,
+        isImportant: false,
+        phoneNumber: undefined,
+        job: undefined,
+        company: undefined,
+        position: undefined,
+        relationship: undefined,
+        personality: undefined,
+        birthdayNotificationEnabled: false,
+        scheduleNotificationEnabled: false,
+      },
+    });
+    expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(2, {
       data: {
         userId: 'user-1',
         type: MediaFileType.IMAGE,
@@ -508,7 +549,7 @@ describe('PeopleService', () => {
         originalName: 'front.jpg',
       },
     });
-    expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(2, {
+    expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(3, {
       data: {
         userId: 'user-1',
         type: MediaFileType.IMAGE,
@@ -539,7 +580,7 @@ describe('PeopleService', () => {
       id: 'person-1',
       userId: 'user-1',
       name: '홍길동',
-      image: null,
+      profileImageFileId: null,
       birthDate: null,
       isImportant: false,
       phoneNumber: null,
@@ -591,6 +632,7 @@ describe('PeopleService', () => {
     ).resolves.toEqual([
       {
         ...person,
+        image: null,
         extraContacts: [emailContact, instagramContact],
         businessCards: [],
       },

@@ -166,7 +166,7 @@ model Person {
   id                          String            @id @default(cuid())
   userId                      String            @map("user_id")
   name                        String
-  image                       String?
+  profileImageFileId          String?           @unique @map("profile_image_file_id")
   birthDate                   DateTime?         @map("birth_date") @db.Date
   isImportant                 Boolean           @default(false) @map("is_important")
   phoneNumber                 String?           @map("phone_number")
@@ -186,7 +186,8 @@ model Person {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileImageFile MediaFile? @relation("PersonProfileImage", fields: [profileImageFileId], references: [id], onDelete: SetNull)
 
   @@unique([id, userId])
   @@index([userId])
@@ -277,6 +278,7 @@ model MediaFile {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personProfile     Person?       @relation("PersonProfileImage")
   businessCardFront BusinessCard? @relation("BusinessCardFrontImage")
   businessCardBack  BusinessCard? @relation("BusinessCardBackImage")
   recordVoice       Record?       @relation("RecordVoiceFile")
@@ -292,6 +294,7 @@ enum MediaFileType {
 }
 
 enum MediaFileUsage {
+  PERSON_PROFILE
   BUSINESS_CARD_FRONT
   BUSINESS_CARD_BACK
   RECORD_VOICE

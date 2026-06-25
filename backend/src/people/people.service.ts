@@ -90,6 +90,10 @@ export interface CreatedPersonResponse {
   }[];
 }
 
+interface PersonProfileImageFile {
+  s3Key: string;
+}
+
 interface UploadedPersonStorageFile extends UploadedS3File {
   originalName?: string;
 }
@@ -125,18 +129,28 @@ export class PeopleService {
       );
 
       return await this.prisma.$transaction(async (tx) => {
-        // Person에는 문자열 값을 그대로 저장하되, 자동완성용 카테고리 테이블에도
+        // Person 도메인 값은 그대로 저장하되, 자동완성용 카테고리 테이블에도
         // 유저별 중복 없이 이름을 추가한다.
         await this.createMissingCategoryNames(tx, userId, items);
 
         const createdPeople: CreatedPersonResponse[] = [];
 
         for (const [index, item] of items.entries()) {
+          const uploadedProfileImage = uploadedFiles[index]?.image;
+          const profileImageFile = uploadedProfileImage
+            ? await tx.mediaFile.create({
+                data: this.toMediaFileCreateData(
+                  userId,
+                  uploadedProfileImage,
+                  MediaFileUsage.PERSON_PROFILE,
+                ),
+              })
+            : null;
           const createdPerson = await tx.person.create({
             data: {
               userId,
               name: item.name,
-              image: uploadedFiles[index]?.image?.url,
+              profileImageFileId: profileImageFile?.id,
               birthDate: this.toDate(item.birthDate),
               isImportant: item.isImportant ?? false,
               phoneNumber: item.phoneNumber,
@@ -172,6 +186,7 @@ export class PeopleService {
 
           createdPeople.push({
             ...createdPerson,
+            image: this.toSignedImageUrl(profileImageFile),
             extraContacts,
             businessCards: businessCard ? [businessCard] : [],
           });
@@ -221,17 +236,26 @@ export class PeopleService {
   }
 
   async getPeople(userId: string): Promise<PersonListItemResponse[]> {
-    return this.prisma.person.findMany({
+    const people = await this.prisma.person.findMany({
       where: { userId },
       select: {
         id: true,
         name: true,
         phoneNumber: true,
-        image: true,
         isImportant: true,
+        profileImageFile: {
+          select: {
+            s3Key: true,
+          },
+        },
       },
       orderBy: { createdAt: Prisma.SortOrder.desc },
     });
+
+    return people.map(({ profileImageFile, ...person }) => ({
+      ...person,
+      image: this.toSignedImageUrl(profileImageFile),
+    }));
   }
 
   private async ensureDefaultCategories(userId: string): Promise<void> {
@@ -455,6 +479,12 @@ export class PeopleService {
       sizeBytes: file.size,
       originalName: file.originalName,
     };
+  }
+
+  private toSignedImageUrl(
+    imageFile: PersonProfileImageFile | null | undefined,
+  ): string | null {
+    return imageFile ? this.s3Service.getSignedUrl(imageFile.s3Key) : null;
   }
 
   private toDate(date?: string): Date | undefined {
