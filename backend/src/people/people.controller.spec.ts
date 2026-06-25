@@ -75,6 +75,12 @@ describe('PeopleController', () => {
             name: ' 홍길동 ',
             isImportant: 'true',
             birthdayNotificationEnabled: false,
+            extraContacts: [
+              {
+                type: ' email ',
+                content: ' user@example.com ',
+              },
+            ],
           },
           {
             name: '김영희',
@@ -96,6 +102,12 @@ describe('PeopleController', () => {
           name: '홍길동',
           isImportant: true,
           birthdayNotificationEnabled: false,
+          extraContacts: [
+            {
+              type: 'email',
+              content: 'user@example.com',
+            },
+          ],
         },
         {
           name: '김영희',
@@ -138,6 +150,24 @@ describe('PeopleController', () => {
       controller.createPeople(
         currentUser,
         JSON.stringify([{ name: '홍길동', unknown: 'field' }]),
+        [],
+      ),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      controller.createPeople(
+        currentUser,
+        JSON.stringify([
+          {
+            name: '홍길동',
+            extraContacts: [
+              {
+                type: 'email',
+                content: 'user@example.com',
+                unknown: 'field',
+              },
+            ],
+          },
+        ]),
         [],
       ),
     ).toThrow(BadRequestException);
