@@ -80,6 +80,26 @@ export class PersonBusinessCardEntity {
   backImageFile: PersonMediaFileEntity | null;
 }
 
+export class PersonExtraContactEntity {
+  @ApiProperty({
+    example: 'clx0000000000000000000004',
+    description: '추가 연락처 ID',
+  })
+  id: string;
+
+  @ApiProperty({
+    example: 'email',
+    description: '추가 정보 유형',
+  })
+  type: string;
+
+  @ApiProperty({
+    example: 'user@example.com',
+    description: '추가 정보 내용',
+  })
+  content: string;
+}
+
 export class PersonEntity implements CreatedPersonResponse {
   @ApiProperty({
     example: 'clx0000000000000000000003',
@@ -166,6 +186,13 @@ export class PersonEntity implements CreatedPersonResponse {
     description: '일정 알림 활성화 여부',
   })
   scheduleNotificationEnabled: boolean;
+
+  @ApiProperty({
+    type: PersonExtraContactEntity,
+    isArray: true,
+    description: '추가 연락처 및 기타 정보 목록',
+  })
+  extraContacts: PersonExtraContactEntity[];
 
   @ApiProperty({
     type: PersonBusinessCardEntity,

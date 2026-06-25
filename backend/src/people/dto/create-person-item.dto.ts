@@ -1,10 +1,12 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsOptional,
   IsString,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 
 const trimString = ({ value }: { value: unknown }) =>
@@ -48,6 +50,18 @@ const optionalBoolean = ({ value }: { value: unknown }) => {
 
   return value;
 };
+
+export class CreateExtraContactDto {
+  @Transform(trimString)
+  @IsString()
+  @MinLength(1)
+  type!: string;
+
+  @Transform(trimString)
+  @IsString()
+  @MinLength(1)
+  content!: string;
+}
 
 export class CreatePersonItemDto {
   @Transform(trimString)
@@ -104,4 +118,10 @@ export class CreatePersonItemDto {
   @IsOptional()
   @IsBoolean()
   scheduleNotificationEnabled?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateExtraContactDto)
+  extraContacts?: CreateExtraContactDto[];
 }

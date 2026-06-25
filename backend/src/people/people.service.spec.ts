@@ -31,6 +31,9 @@ interface TestTransactionClient {
   businessCard: {
     create: jest.Mock;
   };
+  extraContact: {
+    create: jest.Mock;
+  };
 }
 
 interface PrismaMock extends TestTransactionClient {
@@ -66,6 +69,7 @@ describe('PeopleService', () => {
             person: prisma.person,
             mediaFile: prisma.mediaFile,
             businessCard: prisma.businessCard,
+            extraContact: prisma.extraContact,
           };
 
           return input(transactionClient);
@@ -93,6 +97,9 @@ describe('PeopleService', () => {
         create: jest.fn(),
       },
       businessCard: {
+        create: jest.fn(),
+      },
+      extraContact: {
         create: jest.fn(),
       },
     };
@@ -237,10 +244,12 @@ describe('PeopleService', () => {
     ).resolves.toEqual([
       {
         ...firstPerson,
+        extraContacts: [],
         businessCards: [],
       },
       {
         ...secondPerson,
+        extraContacts: [],
         businessCards: [],
       },
     ]);
@@ -420,6 +429,7 @@ describe('PeopleService', () => {
     ).resolves.toEqual([
       {
         ...person,
+        extraContacts: [],
         businessCards: [businessCard],
       },
     ]);
@@ -470,6 +480,96 @@ describe('PeopleService', () => {
       include: {
         frontImageFile: true,
         backImageFile: true,
+      },
+    });
+  });
+
+  it('creates extra contacts for each person in the same transaction', async () => {
+    const person = {
+      id: 'person-1',
+      userId: 'user-1',
+      name: '홍길동',
+      image: null,
+      birthDate: null,
+      isImportant: false,
+      phoneNumber: null,
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      scheduleNotificationEnabled: false,
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-25T00:00:00.000Z'),
+    };
+    const emailContact = {
+      id: 'extra-contact-1',
+      type: 'email',
+      content: 'user@example.com',
+    };
+    const instagramContact = {
+      id: 'extra-contact-2',
+      type: 'instagram',
+      content: '@hong',
+    };
+    prisma.person.create.mockResolvedValue(person);
+    prisma.extraContact.create
+      .mockResolvedValueOnce(emailContact)
+      .mockResolvedValueOnce(instagramContact);
+
+    await expect(
+      service.createPeople(
+        'user-1',
+        [
+          {
+            name: '홍길동',
+            extraContacts: [
+              {
+                type: 'email',
+                content: 'user@example.com',
+              },
+              {
+                type: 'instagram',
+                content: '@hong',
+              },
+            ],
+          },
+        ],
+        new Map(),
+      ),
+    ).resolves.toEqual([
+      {
+        ...person,
+        extraContacts: [emailContact, instagramContact],
+        businessCards: [],
+      },
+    ]);
+
+    expect(prisma.extraContact.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        userId: 'user-1',
+        personId: 'person-1',
+        type: 'email',
+        content: 'user@example.com',
+      },
+      select: {
+        id: true,
+        type: true,
+        content: true,
+      },
+    });
+    expect(prisma.extraContact.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        userId: 'user-1',
+        personId: 'person-1',
+        type: 'instagram',
+        content: '@hong',
+      },
+      select: {
+        id: true,
+        type: true,
+        content: true,
       },
     });
   });

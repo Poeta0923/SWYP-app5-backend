@@ -40,6 +40,21 @@ const PERSON_IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 // 예: people[0].image, people[1].businessCardFrontImage
 const PERSON_FILE_FIELD_PATTERN =
   /^people\[(\d+)\]\.(image|businessCardFrontImage|businessCardBackImage)$/;
+const CREATE_PEOPLE_MULTIPART_DESCRIPTION = [
+  '`people` 필드에는 Person 생성 정보 JSON 배열을 문자열로 넣습니다.',
+  '`extraContacts`에는 Person별 추가 연락처/기타 정보를 여러 개 넣을 수 있습니다.',
+  '파일 필드는 `people[index].필드명` 형식이며, index는 `people` 배열 순서와 같아야 합니다.',
+  '1명 등록도 반드시 배열로 전송합니다.',
+  '',
+  '```bash',
+  'curl -X POST /people \\',
+  '  -H "Authorization: Bearer ACCESS_TOKEN" \\',
+  '  -F \'people=[{"name":"홍길동","job":"개발/IT","extraContacts":[{"type":"email","content":"user@example.com"}]},{"name":"김영희","company":"카카오"}]\' \\',
+  '  -F "people[0].image=@profile.png" \\',
+  '  -F "people[0].businessCardFrontImage=@card-front.png" \\',
+  '  -F "people[1].businessCardBackImage=@card-back.png"',
+  '```',
+].join('\n');
 
 interface UploadedPersonMultipartFile extends PersonImageFile {
   fieldname: string;
@@ -81,9 +96,13 @@ export class PeopleController {
     }),
   )
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '인물 일괄 등록' })
+  @ApiOperation({
+    summary: '인물 일괄 등록',
+    description: CREATE_PEOPLE_MULTIPART_DESCRIPTION,
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
+    description: CREATE_PEOPLE_MULTIPART_DESCRIPTION,
     schema: {
       type: 'object',
       required: ['people'],
@@ -104,6 +123,16 @@ export class PeopleController {
               personality: '차분하고 꼼꼼함',
               birthdayNotificationEnabled: true,
               scheduleNotificationEnabled: false,
+              extraContacts: [
+                {
+                  type: 'email',
+                  content: 'user@example.com',
+                },
+                {
+                  type: 'instagram',
+                  content: '@hong',
+                },
+              ],
             },
           ]),
         },
@@ -121,6 +150,21 @@ export class PeopleController {
           type: 'string',
           format: 'binary',
           description: '0번째 인물 명함 뒷면 이미지',
+        },
+        'people[1].image': {
+          type: 'string',
+          format: 'binary',
+          description: '1번째 인물 프로필 이미지 예시',
+        },
+        'people[1].businessCardFrontImage': {
+          type: 'string',
+          format: 'binary',
+          description: '1번째 인물 명함 앞면 이미지 예시',
+        },
+        'people[1].businessCardBackImage': {
+          type: 'string',
+          format: 'binary',
+          description: '1번째 인물 명함 뒷면 이미지 예시',
         },
       },
     },

@@ -6,7 +6,10 @@ import {
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service, type UploadedS3File } from '../s3/s3.service';
-import type { CreatePersonItemDto } from './dto/create-person-item.dto';
+import type {
+  CreateExtraContactDto,
+  CreatePersonItemDto,
+} from './dto/create-person-item.dto';
 import {
   DEFAULT_JOB_NAMES,
   DEFAULT_POSITION_NAMES,
@@ -49,6 +52,11 @@ export interface CreatedPersonResponse {
   personality: string | null;
   birthdayNotificationEnabled: boolean;
   scheduleNotificationEnabled: boolean;
+  extraContacts: {
+    id: string;
+    type: string;
+    content: string;
+  }[];
   businessCards: {
     id: string;
     frontImageFile: {
@@ -135,6 +143,12 @@ export class PeopleService {
                 item.scheduleNotificationEnabled ?? false,
             },
           });
+          const extraContacts = await this.createExtraContacts(
+            tx,
+            userId,
+            createdPerson.id,
+            item.extraContacts,
+          );
           const uploadedBusinessCardFiles = uploadedFiles[index];
           // 명함 앞/뒤 이미지 중 하나라도 있을 때만 BusinessCard를 만든다.
           const businessCard =
@@ -150,6 +164,7 @@ export class PeopleService {
 
           createdPeople.push({
             ...createdPerson,
+            extraContacts,
             businessCards: businessCard ? [businessCard] : [],
           });
         }
@@ -360,6 +375,35 @@ export class PeopleService {
         backImageFile: true,
       },
     });
+  }
+
+  private async createExtraContacts(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    personId: string,
+    extraContacts: CreateExtraContactDto[] | undefined,
+  ) {
+    if (!extraContacts || extraContacts.length === 0) {
+      return [];
+    }
+
+    return Promise.all(
+      extraContacts.map((extraContact) =>
+        tx.extraContact.create({
+          data: {
+            userId,
+            personId,
+            type: extraContact.type,
+            content: extraContact.content,
+          },
+          select: {
+            id: true,
+            type: true,
+            content: true,
+          },
+        }),
+      ),
+    );
   }
 
   private toCategoryCreateManyData(
