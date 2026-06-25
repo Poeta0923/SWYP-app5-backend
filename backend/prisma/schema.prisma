@@ -32,6 +32,7 @@ model User {
   businessCards         BusinessCard[]
   extraContacts         ExtraContact[]
   records               Record[]
+  mediaFiles            MediaFile[]
   schedules             Schedule[]
   pushTokens            PushToken[]
   notificationJobs      NotificationJob[]
@@ -241,20 +242,59 @@ model Relationship {
 }
 
 model BusinessCard {
-  id       String  @id @default(cuid())
-  userId   String  @map("user_id")
-  personId String  @map("person_id")
-  image    String?
+  id               String  @id @default(cuid())
+  userId           String  @map("user_id")
+  personId         String  @map("person_id")
+  frontImageFileId String? @unique @map("front_image_file_id")
+  backImageFileId  String? @unique @map("back_image_file_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  person Person @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person         Person     @relation(fields: [personId, userId], references: [id, userId], onDelete: Cascade)
+  frontImageFile MediaFile? @relation("BusinessCardFrontImage", fields: [frontImageFileId], references: [id], onDelete: SetNull)
+  backImageFile  MediaFile? @relation("BusinessCardBackImage", fields: [backImageFileId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([personId])
   @@map("business_cards")
+}
+
+model MediaFile {
+  id           String         @id @default(cuid())
+  userId       String         @map("user_id")
+  type         MediaFileType
+  usage        MediaFileUsage
+  bucket       String
+  s3Key        String         @unique @map("s3_key")
+  contentType  String         @map("content_type")
+  sizeBytes    Int            @map("size_bytes")
+  originalName String?        @map("original_name")
+  deletedAt    DateTime?      @map("deleted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessCardFront BusinessCard? @relation("BusinessCardFrontImage")
+  businessCardBack  BusinessCard? @relation("BusinessCardBackImage")
+  recordVoice       Record?       @relation("RecordVoiceFile")
+
+  @@index([userId])
+  @@index([userId, usage])
+  @@map("media_files")
+}
+
+enum MediaFileType {
+  IMAGE
+  AUDIO
+}
+
+enum MediaFileUsage {
+  BUSINESS_CARD_FRONT
+  BUSINESS_CARD_BACK
+  RECORD_VOICE
 }
 
 model ExtraContact {
@@ -383,7 +423,7 @@ model Record {
   type        RecordType      @default(TEXT)
   title       String          @default("제목 없음")
   content     String?
-  voiceFile   String?         @map("voice_file")
+  voiceFileId String?         @unique @map("voice_file_id")
   people      RecordPerson[]
   keywords    RecordKeyword[]
   recordMemos RecordMemo[]
@@ -391,7 +431,8 @@ model Record {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voiceFile MediaFile? @relation("RecordVoiceFile", fields: [voiceFileId], references: [id], onDelete: SetNull)
 
   @@unique([id, userId])
   @@index([userId])

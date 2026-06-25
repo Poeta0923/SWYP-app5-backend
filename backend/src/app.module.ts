@@ -9,6 +9,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { AgreementsModule } from './agreements/agreements.module';
 import { PeopleModule } from './people/people.module';
+import { S3Module } from './s3/s3.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PeopleModule } from './people/people.module';
     AuthModule,
     AgreementsModule,
     PeopleModule,
+    S3Module,
   ],
   controllers: [AppController],
   providers: [AppService],
