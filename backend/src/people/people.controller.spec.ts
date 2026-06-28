@@ -161,7 +161,7 @@ describe('PeopleController', () => {
     expect(peopleService.getPerson).toHaveBeenCalledWith('user-1', 'person-1');
   });
 
-  it('registers PATCH /people/:personId/update behind auth and required agreements guards and updates one person', async () => {
+  it('registers PATCH /people/:personId behind auth and required agreements guards and updates one person', async () => {
     const updatePersonHandler = Object.getOwnPropertyDescriptor(
       PeopleController.prototype,
       'updatePerson',
@@ -182,7 +182,7 @@ describe('PeopleController', () => {
     ).resolves.toEqual({});
 
     expect(Reflect.getMetadata(PATH_METADATA, updatePersonHandler)).toBe(
-      ':personId/update',
+      ':personId',
     );
     expect(Reflect.getMetadata(METHOD_METADATA, updatePersonHandler)).toBe(
       RequestMethod.PATCH,
