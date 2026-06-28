@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   MediaFileType,
   MediaFileUsage,
@@ -100,6 +104,8 @@ export interface CreatedPersonResponse {
   }[];
 }
 
+export type PersonDetailResponse = CreatedPersonResponse;
+
 interface PersonProfileImageFile {
   s3Key: string;
 }
@@ -129,6 +135,28 @@ type MediaFileResponseSource = {
   contentType: string;
   sizeBytes: number;
   originalName: string | null;
+};
+
+type PersonDetailQueryResult = {
+  id: string;
+  name: string;
+  birthDate: Date | null;
+  isImportant: boolean;
+  phoneNumber: string;
+  job: string | null;
+  company: string | null;
+  position: string | null;
+  relationship: string | null;
+  personality: string | null;
+  birthdayNotificationEnabled: boolean;
+  birthdayNotificationOffsetDays: number | null;
+  profileImageFile: PersonProfileImageFile | null;
+  extraContacts: {
+    id: string;
+    type: string;
+    content: string;
+  }[];
+  businessCards: BusinessCardWithMediaFiles[];
 };
 
 @Injectable()
@@ -307,6 +335,85 @@ export class PeopleService {
       image: this.toSignedImageUrl(profileImageFile),
       updatedAt: person.updatedAt.toISOString(),
     }));
+  }
+
+  async getPerson(
+    userId: string,
+    personId: string,
+  ): Promise<PersonDetailResponse> {
+    const person = await this.prisma.person.findFirst({
+      where: {
+        id: personId,
+        userId,
+      },
+      select: {
+        id: true,
+        name: true,
+        birthDate: true,
+        isImportant: true,
+        phoneNumber: true,
+        job: true,
+        company: true,
+        position: true,
+        relationship: true,
+        personality: true,
+        birthdayNotificationEnabled: true,
+        birthdayNotificationOffsetDays: true,
+        profileImageFile: {
+          select: {
+            s3Key: true,
+          },
+        },
+        extraContacts: {
+          select: {
+            id: true,
+            type: true,
+            content: true,
+          },
+          orderBy: { createdAt: Prisma.SortOrder.asc },
+        },
+        businessCards: {
+          select: {
+            id: true,
+            frontImageFile: {
+              select: {
+                id: true,
+                type: true,
+                usage: true,
+                bucket: true,
+                s3Key: true,
+                contentType: true,
+                sizeBytes: true,
+                originalName: true,
+              },
+            },
+            backImageFile: {
+              select: {
+                id: true,
+                type: true,
+                usage: true,
+                bucket: true,
+                s3Key: true,
+                contentType: true,
+                sizeBytes: true,
+                originalName: true,
+              },
+            },
+          },
+          orderBy: { createdAt: Prisma.SortOrder.asc },
+        },
+      },
+    });
+
+    if (!person) {
+      throw new NotFoundException({
+        code: 'PERSON_NOT_FOUND',
+        message: '인물을 찾을 수 없습니다.',
+        personId,
+      });
+    }
+
+    return this.toPersonDetailResponse(person);
   }
 
   private async ensureDefaultCategories(userId: string): Promise<void> {
@@ -558,6 +665,21 @@ export class PeopleService {
       id: businessCard.id,
       frontImageFile: this.toMediaFileResponse(businessCard.frontImageFile),
       backImageFile: this.toMediaFileResponse(businessCard.backImageFile),
+    };
+  }
+
+  private toPersonDetailResponse(
+    person: PersonDetailQueryResult,
+  ): PersonDetailResponse {
+    const { profileImageFile, businessCards, ...personFields } = person;
+
+    return {
+      ...personFields,
+      birthDate: this.toDateOnlyString(person.birthDate),
+      image: this.toSignedImageUrl(profileImageFile),
+      businessCards: businessCards.map((businessCard) =>
+        this.toBusinessCardResponse(businessCard),
+      ),
     };
   }
 

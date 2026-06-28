@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   UploadedFiles,
   UseGuards,
@@ -16,6 +17,7 @@ import {
   ApiConsumes,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -187,6 +189,30 @@ export class PeopleController {
   })
   getCategoryNames(@CurrentUser() currentUser: JwtAccessPayload) {
     return this.peopleService.getCategoryNames(currentUser.sub);
+  }
+
+  @Get(':personId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '인물 상세 조회' })
+  @ApiOkResponse({
+    description: '현재 사용자의 인물 상세 정보 조회 성공',
+    type: PersonEntity,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '인물을 찾을 수 없음',
+  })
+  getPerson(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('personId') personId: string,
+  ) {
+    return this.peopleService.getPerson(currentUser.sub, personId);
   }
 
   private parsePerson(personJson: string | undefined): CreatePersonItemDto {
