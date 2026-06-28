@@ -17,6 +17,7 @@ describe('PeopleController', () => {
     createPerson: jest.Mock;
     importPeople: jest.Mock;
     getPeople: jest.Mock;
+    getPerson: jest.Mock;
     getCategoryNames: jest.Mock;
   };
   let controller: PeopleController;
@@ -26,6 +27,7 @@ describe('PeopleController', () => {
       createPerson: jest.fn().mockResolvedValue({}),
       importPeople: jest.fn().mockResolvedValue([]),
       getPeople: jest.fn().mockResolvedValue([]),
+      getPerson: jest.fn().mockResolvedValue({}),
       getCategoryNames: jest.fn().mockResolvedValue({
         jobs: [],
         companies: [],
@@ -126,6 +128,34 @@ describe('PeopleController', () => {
       RequiredAgreementsGuard,
     ]);
     expect(peopleService.getPeople).toHaveBeenCalledWith('user-1');
+  });
+
+  it('registers GET /people/:personId behind auth and required agreements guards and fetches one person', async () => {
+    const getPersonHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'getPerson',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(
+      controller.getPerson(currentUser, 'person-1'),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, getPersonHandler)).toBe(
+      ':personId',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, getPersonHandler)).toBe(
+      RequestMethod.GET,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, getPersonHandler)).toEqual([
+      JwtAuthGuard,
+      RequiredAgreementsGuard,
+    ]);
+    expect(peopleService.getPerson).toHaveBeenCalledWith('user-1', 'person-1');
   });
 
   it('parses person JSON and maps files to service input', async () => {

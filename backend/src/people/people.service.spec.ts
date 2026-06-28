@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   MediaFileType,
   MediaFileUsage,
@@ -247,6 +247,172 @@ describe('PeopleService', () => {
       orderBy: { createdAt: Prisma.SortOrder.desc },
     });
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
+  });
+
+  it('returns one current user person detail with related contacts and business cards', async () => {
+    prisma.person.findFirst.mockResolvedValue({
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: new Date('1990-01-01'),
+      isImportant: true,
+      phoneNumber: '010-1234-5678',
+      job: '개발/IT',
+      company: '토스',
+      position: '과장',
+      relationship: '동료',
+      personality: '꼼꼼함',
+      birthdayNotificationEnabled: true,
+      birthdayNotificationOffsetDays: 1,
+      profileImageFile: {
+        s3Key: 'profiles/profile.png',
+      },
+      extraContacts: [
+        {
+          id: 'extra-contact-1',
+          type: 'email',
+          content: 'user@example.com',
+        },
+      ],
+      businessCards: [
+        {
+          id: 'business-card-1',
+          frontImageFile: {
+            id: 'front-media-id',
+            type: MediaFileType.IMAGE,
+            usage: MediaFileUsage.BUSINESS_CARD_FRONT,
+            bucket: 'bucket',
+            s3Key: 'cards/front.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 5,
+            originalName: 'front.jpg',
+          },
+          backImageFile: null,
+        },
+      ],
+    });
+
+    await expect(service.getPerson('user-1', 'person-1')).resolves.toEqual({
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: '1990-01-01',
+      image: 'https://signed.example.com/profiles/profile.png',
+      isImportant: true,
+      phoneNumber: '010-1234-5678',
+      job: '개발/IT',
+      company: '토스',
+      position: '과장',
+      relationship: '동료',
+      personality: '꼼꼼함',
+      birthdayNotificationEnabled: true,
+      birthdayNotificationOffsetDays: 1,
+      extraContacts: [
+        {
+          id: 'extra-contact-1',
+          type: 'email',
+          content: 'user@example.com',
+        },
+      ],
+      businessCards: [
+        {
+          id: 'business-card-1',
+          frontImageFile: {
+            id: 'front-media-id',
+            url: 'https://signed.example.com/cards/front.jpg',
+            type: MediaFileType.IMAGE,
+            usage: MediaFileUsage.BUSINESS_CARD_FRONT,
+            bucket: 'bucket',
+            s3Key: 'cards/front.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 5,
+            originalName: 'front.jpg',
+          },
+          backImageFile: null,
+        },
+      ],
+    });
+
+    expect(prisma.person.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'person-1',
+        userId: 'user-1',
+      },
+      select: {
+        id: true,
+        name: true,
+        birthDate: true,
+        isImportant: true,
+        phoneNumber: true,
+        job: true,
+        company: true,
+        position: true,
+        relationship: true,
+        personality: true,
+        birthdayNotificationEnabled: true,
+        birthdayNotificationOffsetDays: true,
+        profileImageFile: {
+          select: {
+            s3Key: true,
+          },
+        },
+        extraContacts: {
+          select: {
+            id: true,
+            type: true,
+            content: true,
+          },
+          orderBy: { createdAt: Prisma.SortOrder.asc },
+        },
+        businessCards: {
+          select: {
+            id: true,
+            frontImageFile: {
+              select: {
+                id: true,
+                type: true,
+                usage: true,
+                bucket: true,
+                s3Key: true,
+                contentType: true,
+                sizeBytes: true,
+                originalName: true,
+              },
+            },
+            backImageFile: {
+              select: {
+                id: true,
+                type: true,
+                usage: true,
+                bucket: true,
+                s3Key: true,
+                contentType: true,
+                sizeBytes: true,
+                originalName: true,
+              },
+            },
+          },
+          orderBy: { createdAt: Prisma.SortOrder.asc },
+        },
+      },
+    });
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith('cards/front.jpg');
+  });
+
+  it('throws not found when current user person detail does not exist', async () => {
+    prisma.person.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.getPerson('user-1', 'person-missing'),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PERSON_NOT_FOUND',
+        message: '인물을 찾을 수 없습니다.',
+        personId: 'person-missing',
+      },
+    });
+    await expect(
+      service.getPerson('user-1', 'person-missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('imports contact people with only name and phone number', async () => {
