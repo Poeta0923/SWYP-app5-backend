@@ -123,12 +123,11 @@ export class PersonListItemEntity implements PersonListItemResponse {
   })
   name: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '010-1234-5678',
     description: '전화번호',
-    nullable: true,
   })
-  phoneNumber: string | null;
+  phoneNumber: string;
 
   @ApiPropertyOptional({
     example:
@@ -179,12 +178,11 @@ export class PersonEntity implements CreatedPersonResponse {
   })
   isImportant: boolean;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '010-1234-5678',
     description: '전화번호',
-    nullable: true,
   })
-  phoneNumber: string | null;
+  phoneNumber: string;
 
   @ApiPropertyOptional({
     example: '개발/IT',

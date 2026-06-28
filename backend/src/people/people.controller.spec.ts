@@ -4,14 +4,18 @@ import {
   METHOD_METADATA,
   PATH_METADATA,
 } from '@nestjs/common/constants';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import { RequiredAgreementsGuard } from '../agreements/required-agreements.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ImportPeopleDto } from './dto/import-people.dto';
 import { PeopleController } from './people.controller';
 import { PeopleService } from './people.service';
 
 describe('PeopleController', () => {
   let peopleService: {
-    createPeople: jest.Mock;
+    createPerson: jest.Mock;
+    importPeople: jest.Mock;
     getPeople: jest.Mock;
     getCategoryNames: jest.Mock;
   };
@@ -19,7 +23,8 @@ describe('PeopleController', () => {
 
   beforeEach(() => {
     peopleService = {
-      createPeople: jest.fn().mockResolvedValue([]),
+      createPerson: jest.fn().mockResolvedValue({}),
+      importPeople: jest.fn().mockResolvedValue([]),
       getPeople: jest.fn().mockResolvedValue([]),
       getCategoryNames: jest.fn().mockResolvedValue({
         jobs: [],
@@ -34,19 +39,66 @@ describe('PeopleController', () => {
   });
 
   it('registers POST /people behind auth and required agreements guards', () => {
-    const createPeopleHandler = Object.getOwnPropertyDescriptor(
+    const createPersonHandler = Object.getOwnPropertyDescriptor(
       PeopleController.prototype,
-      'createPeople',
+      'createPerson',
     )?.value as object;
 
     expect(Reflect.getMetadata(PATH_METADATA, PeopleController)).toBe('people');
-    expect(Reflect.getMetadata(PATH_METADATA, createPeopleHandler)).toBe('/');
-    expect(Reflect.getMetadata(METHOD_METADATA, createPeopleHandler)).toBe(
+    expect(Reflect.getMetadata(PATH_METADATA, createPersonHandler)).toBe('/');
+    expect(Reflect.getMetadata(METHOD_METADATA, createPersonHandler)).toBe(
       RequestMethod.POST,
     );
-    expect(Reflect.getMetadata(GUARDS_METADATA, createPeopleHandler)).toEqual([
+    expect(Reflect.getMetadata(GUARDS_METADATA, createPersonHandler)).toEqual([
       JwtAuthGuard,
       RequiredAgreementsGuard,
+    ]);
+  });
+
+  it('registers POST /people/import behind auth and required agreements guards and imports contacts', async () => {
+    const importPeopleHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'importPeople',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const dto = plainToInstance(ImportPeopleDto, {
+      people: [
+        {
+          name: ' 홍길동 ',
+          phoneNumber: ' 010-1234-5678 ',
+        },
+        {
+          name: '김영희',
+          phoneNumber: '010-1234-5678',
+        },
+      ],
+    });
+
+    await expect(controller.importPeople(currentUser, dto)).resolves.toEqual([]);
+
+    expect(Reflect.getMetadata(PATH_METADATA, importPeopleHandler)).toBe(
+      'import',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, importPeopleHandler)).toBe(
+      RequestMethod.POST,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, importPeopleHandler)).toEqual([
+      JwtAuthGuard,
+      RequiredAgreementsGuard,
+    ]);
+    expect(peopleService.importPeople).toHaveBeenCalledWith('user-1', [
+      {
+        name: '홍길동',
+        phoneNumber: '010-1234-5678',
+      },
+      {
+        name: '김영희',
+        phoneNumber: '010-1234-5678',
+      },
     ]);
   });
 
@@ -74,21 +126,21 @@ describe('PeopleController', () => {
     expect(peopleService.getPeople).toHaveBeenCalledWith('user-1');
   });
 
-  it('parses people JSON and maps indexed files to service input', async () => {
+  it('parses person JSON and maps files to service input', async () => {
     const currentUser = {
       sub: 'user-1',
       familyId: 'family-1',
       role: 'USER',
     };
     const image = {
-      fieldname: 'people[0].image',
+      fieldname: 'image',
       buffer: Buffer.from('image'),
       mimetype: 'image/png',
       originalname: 'profile.png',
       size: 5,
     };
     const businessCardFrontImage = {
-      fieldname: 'people[1].businessCardFrontImage',
+      fieldname: 'businessCardFrontImage',
       buffer: Buffer.from('front'),
       mimetype: 'image/jpeg',
       originalname: 'front.jpg',
@@ -96,120 +148,113 @@ describe('PeopleController', () => {
     };
 
     await expect(
-      controller.createPeople(
+      controller.createPerson(
         currentUser,
-        JSON.stringify([
-          {
-            name: ' 홍길동 ',
-            isImportant: 'true',
-            birthdayNotificationEnabled: false,
-            extraContacts: [
-              {
-                type: ' email ',
-                content: ' user@example.com ',
-              },
-            ],
-          },
-          {
-            name: '김영희',
-            company: '카카오',
-            scheduleNotificationEnabled: 'false',
-          },
-        ]),
-        [image, businessCardFrontImage],
-      ),
-    ).resolves.toEqual([]);
-
-    const createPeopleCalls = peopleService.createPeople.mock
-      .calls as Parameters<PeopleService['createPeople']>[];
-    const filesByIndex = createPeopleCalls[0][2];
-    expect(peopleService.createPeople).toHaveBeenCalledWith(
-      'user-1',
-      [
-        {
-          name: '홍길동',
-          isImportant: true,
+        JSON.stringify({
+          name: ' 홍길동 ',
+          phoneNumber: ' 010-1234-5678 ',
+          isImportant: 'true',
           birthdayNotificationEnabled: false,
           extraContacts: [
             {
-              type: 'email',
-              content: 'user@example.com',
+              type: ' email ',
+              content: ' user@example.com ',
             },
           ],
-        },
-        {
-          name: '김영희',
-          company: '카카오',
-          scheduleNotificationEnabled: false,
-        },
-      ],
-      filesByIndex,
+        }),
+        [image, businessCardFrontImage],
+      ),
+    ).resolves.toEqual({});
+
+    const createPersonCalls = peopleService.createPerson.mock
+      .calls as Parameters<PeopleService['createPerson']>[];
+    const personFiles = createPersonCalls[0][2];
+    expect(peopleService.createPerson).toHaveBeenCalledWith(
+      'user-1',
+      {
+        name: '홍길동',
+        phoneNumber: '010-1234-5678',
+        isImportant: true,
+        birthdayNotificationEnabled: false,
+        extraContacts: [
+          {
+            type: 'email',
+            content: 'user@example.com',
+          },
+        ],
+      },
+      personFiles,
     );
-    expect(filesByIndex.get(0)?.image).toBe(image);
-    expect(filesByIndex.get(1)?.businessCardFrontImage).toBe(
-      businessCardFrontImage,
-    );
+    expect(personFiles.image).toBe(image);
+    expect(personFiles.businessCardFrontImage).toBe(businessCardFrontImage);
   });
 
-  it('rejects invalid people payloads', () => {
+  it('rejects invalid person payloads', () => {
     const currentUser = {
       sub: 'user-1',
       familyId: 'family-1',
       role: 'USER',
     };
 
-    expect(() => controller.createPeople(currentUser, undefined, [])).toThrow(
+    expect(() => controller.createPerson(currentUser, undefined, [])).toThrow(
       BadRequestException,
     );
-    expect(() => controller.createPeople(currentUser, '{invalid', [])).toThrow(
+    expect(() => controller.createPerson(currentUser, '{invalid', [])).toThrow(
       BadRequestException,
     );
     expect(() =>
-      controller.createPeople(
+      controller.createPerson(
+        currentUser,
+        JSON.stringify([{ name: '홍길동', phoneNumber: '010-1234-5678' }]),
+        [],
+      ),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      controller.createPerson(
         currentUser,
         JSON.stringify({ name: '홍길동' }),
         [],
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      controller.createPeople(currentUser, JSON.stringify([]), []),
-    ).toThrow(BadRequestException);
-    expect(() =>
-      controller.createPeople(
+      controller.createPerson(
         currentUser,
-        JSON.stringify([{ name: '홍길동', unknown: 'field' }]),
+        JSON.stringify({
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+          unknown: 'field',
+        }),
         [],
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      controller.createPeople(
+      controller.createPerson(
         currentUser,
-        JSON.stringify([
-          {
-            name: '홍길동',
-            extraContacts: [
-              {
-                type: 'email',
-                content: 'user@example.com',
-                unknown: 'field',
-              },
-            ],
-          },
-        ]),
+        JSON.stringify({
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+          extraContacts: [
+            {
+              type: 'email',
+              content: 'user@example.com',
+              unknown: 'field',
+            },
+          ],
+        }),
         [],
       ),
     ).toThrow(BadRequestException);
-    expect(peopleService.createPeople).not.toHaveBeenCalled();
+    expect(peopleService.createPerson).not.toHaveBeenCalled();
   });
 
-  it('rejects file indexes outside the people array and duplicate file fields', () => {
+  it('rejects invalid file fields and duplicate file fields', () => {
     const currentUser = {
       sub: 'user-1',
       familyId: 'family-1',
       role: 'USER',
     };
     const image = {
-      fieldname: 'people[0].image',
+      fieldname: 'image',
       buffer: Buffer.from('image'),
       mimetype: 'image/png',
       originalname: 'profile.png',
@@ -217,23 +262,75 @@ describe('PeopleController', () => {
     };
 
     expect(() =>
-      controller.createPeople(
+      controller.createPerson(
         currentUser,
-        JSON.stringify([{ name: '홍길동' }]),
+        JSON.stringify({ name: '홍길동', phoneNumber: '010-1234-5678' }),
         [
           {
             ...image,
-            fieldname: 'people[1].image',
+            fieldname: 'people[0].image',
           },
         ],
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      controller.createPeople(
+      controller.createPerson(
         currentUser,
-        JSON.stringify([{ name: '홍길동' }]),
+        JSON.stringify({ name: '홍길동', phoneNumber: '010-1234-5678' }),
         [image, image],
       ),
     ).toThrow(BadRequestException);
+  });
+
+  it('validates import people payloads', () => {
+    const validDto = plainToInstance(ImportPeopleDto, {
+      people: [
+        {
+          name: ' 홍길동 ',
+          phoneNumber: ' 010-1234-5678 ',
+        },
+      ],
+    });
+    expect(
+      validateSync(validDto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    ).toEqual([]);
+    expect(validDto.people).toEqual([
+      {
+        name: '홍길동',
+        phoneNumber: '010-1234-5678',
+      },
+    ]);
+
+    const invalidPayloads = [
+      {},
+      { people: [] },
+      { people: [{ phoneNumber: '010-1234-5678' }] },
+      { people: [{ name: '홍길동' }] },
+      { people: [{ name: '', phoneNumber: '010-1234-5678' }] },
+      { people: [{ name: '홍길동', phoneNumber: '' }] },
+      {
+        people: [
+          {
+            name: '홍길동',
+            phoneNumber: '010-1234-5678',
+            unknown: 'field',
+          },
+        ],
+      },
+    ];
+
+    for (const payload of invalidPayloads) {
+      const dto = plainToInstance(ImportPeopleDto, payload);
+
+      expect(
+        validateSync(dto, {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+        }).length,
+      ).toBeGreaterThan(0);
+    }
   });
 });

@@ -169,7 +169,7 @@ model Person {
   profileImageFileId          String?           @unique @map("profile_image_file_id")
   birthDate                   DateTime?         @map("birth_date") @db.Date
   isImportant                 Boolean           @default(false) @map("is_important")
-  phoneNumber                 String?           @map("phone_number")
+  phoneNumber                 String            @map("phone_number")
   job                         String?
   company                     String?
   position                    String?

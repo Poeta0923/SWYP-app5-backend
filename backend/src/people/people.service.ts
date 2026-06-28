@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import {
   MediaFileType,
   MediaFileUsage,
@@ -10,6 +10,7 @@ import type {
   CreateExtraContactDto,
   CreatePersonItemDto,
 } from './dto/create-person-item.dto';
+import type { ImportPersonItemDto } from './dto/import-people.dto';
 import {
   DEFAULT_JOB_NAMES,
   DEFAULT_POSITION_NAMES,
@@ -26,7 +27,7 @@ export interface PersonCategoryNamesResponse {
 export interface PersonListItemResponse {
   id: string;
   name: string;
-  phoneNumber: string | null;
+  phoneNumber: string;
   image: string | null;
   isImportant: boolean;
 }
@@ -44,15 +45,13 @@ export interface PersonCreateFiles {
   businessCardBackImage?: PersonImageFile;
 }
 
-export type PersonCreateFilesByIndex = Map<number, PersonCreateFiles>;
-
 export interface CreatedPersonResponse {
   id: string;
   name: string;
   image: string | null;
   birthDate: string | null;
   isImportant: boolean;
-  phoneNumber: string | null;
+  phoneNumber: string;
   job: string | null;
   company: string | null;
   position: string | null;
@@ -130,97 +129,114 @@ export class PeopleService {
     private readonly s3Service: S3Service,
   ) {}
 
-  async createPeople(
+  async createPerson(
     userId: string,
-    items: CreatePersonItemDto[],
-    filesByIndex: PersonCreateFilesByIndex,
-  ): Promise<CreatedPersonResponse[]> {
+    item: CreatePersonItemDto,
+    files: PersonCreateFiles,
+  ): Promise<CreatedPersonResponse> {
+    await this.assertPhoneNumberIsAvailable(userId, item.phoneNumber);
+
     const uploadedFileKeys: string[] = [];
 
     try {
       // S3는 DB transaction에 포함되지 않으므로 먼저 업로드하고 key를 기록한다.
       // 이후 DB 단계가 실패하면 catch에서 업로드된 object를 best-effort로 삭제한다.
-      const uploadedFiles = await this.uploadPeopleFiles(
+      const uploadedFiles = await this.uploadPersonFiles(
         userId,
-        items,
-        filesByIndex,
+        files,
         uploadedFileKeys,
       );
 
       return await this.prisma.$transaction(async (tx) => {
         // Person 도메인 값은 그대로 저장하되, 자동완성용 카테고리 테이블에도
         // 유저별 중복 없이 이름을 추가한다.
-        await this.createMissingCategoryNames(tx, userId, items);
+        await this.createMissingCategoryNames(tx, userId, [item]);
 
-        const createdPeople: CreatedPersonResponse[] = [];
-
-        for (const [index, item] of items.entries()) {
-          const uploadedProfileImage = uploadedFiles[index]?.image;
-          const profileImageFile = uploadedProfileImage
-            ? await tx.mediaFile.create({
-                data: this.toMediaFileCreateData(
-                  userId,
-                  uploadedProfileImage,
-                  MediaFileUsage.PERSON_PROFILE,
-                ),
-              })
-            : null;
-          const createdPerson = await tx.person.create({
-            data: {
-              userId,
-              name: item.name,
-              profileImageFileId: profileImageFile?.id,
-              birthDate: this.toDate(item.birthDate),
-              isImportant: item.isImportant ?? false,
-              phoneNumber: item.phoneNumber,
-              job: item.job,
-              company: item.company,
-              position: item.position,
-              relationship: item.relationship,
-              personality: item.personality,
-              birthdayNotificationEnabled:
-                item.birthdayNotificationEnabled ?? false,
-              scheduleNotificationEnabled:
-                item.scheduleNotificationEnabled ?? false,
-            },
-          });
-          const extraContacts = await this.createExtraContacts(
-            tx,
+        const profileImageFile = uploadedFiles.image
+          ? await tx.mediaFile.create({
+              data: this.toMediaFileCreateData(
+                userId,
+                uploadedFiles.image,
+                MediaFileUsage.PERSON_PROFILE,
+              ),
+            })
+          : null;
+        const createdPerson = await tx.person.create({
+          data: {
             userId,
-            createdPerson.id,
-            item.extraContacts,
-          );
-          const uploadedBusinessCardFiles = uploadedFiles[index];
-          // 명함 앞/뒤 이미지 중 하나라도 있을 때만 BusinessCard를 만든다.
-          const businessCard =
-            uploadedBusinessCardFiles?.businessCardFrontImage ||
-            uploadedBusinessCardFiles?.businessCardBackImage
-              ? await this.createBusinessCard(
-                  tx,
-                  userId,
-                  createdPerson.id,
-                  uploadedBusinessCardFiles,
-                )
-              : null;
+            name: item.name,
+            profileImageFileId: profileImageFile?.id,
+            birthDate: this.toDate(item.birthDate),
+            isImportant: item.isImportant ?? false,
+            phoneNumber: item.phoneNumber,
+            job: item.job,
+            company: item.company,
+            position: item.position,
+            relationship: item.relationship,
+            personality: item.personality,
+            birthdayNotificationEnabled:
+              item.birthdayNotificationEnabled ?? false,
+            scheduleNotificationEnabled:
+              item.scheduleNotificationEnabled ?? false,
+          },
+        });
+        const extraContacts = await this.createExtraContacts(
+          tx,
+          userId,
+          createdPerson.id,
+          item.extraContacts,
+        );
+        // 명함 앞/뒤 이미지 중 하나라도 있을 때만 BusinessCard를 만든다.
+        const businessCard =
+          uploadedFiles.businessCardFrontImage ||
+          uploadedFiles.businessCardBackImage
+            ? await this.createBusinessCard(
+                tx,
+                userId,
+                createdPerson.id,
+                uploadedFiles,
+              )
+            : null;
 
-          createdPeople.push({
-            ...createdPerson,
-            birthDate: this.toDateOnlyString(createdPerson.birthDate),
-            image: this.toSignedImageUrl(profileImageFile),
-            extraContacts,
-            businessCards: businessCard
-              ? [this.toBusinessCardResponse(businessCard)]
-              : [],
-          });
-        }
-
-        return createdPeople;
+        return {
+          ...createdPerson,
+          birthDate: this.toDateOnlyString(createdPerson.birthDate),
+          image: this.toSignedImageUrl(profileImageFile),
+          extraContacts,
+          businessCards: businessCard
+            ? [this.toBusinessCardResponse(businessCard)]
+            : [],
+        };
       });
     } catch (error) {
       // DB rollback은 Prisma가 처리하지만 S3 업로드는 외부 부수효과라 직접 보상한다.
       await this.deleteUploadedFiles(uploadedFileKeys);
       throw error;
     }
+  }
+
+  async importPeople(
+    userId: string,
+    items: ImportPersonItemDto[],
+  ): Promise<PersonListItemResponse[]> {
+    const people = await this.prisma.person.createManyAndReturn({
+      data: items.map((item) => ({
+        userId,
+        name: item.name,
+        phoneNumber: item.phoneNumber,
+      })),
+      select: {
+        id: true,
+        name: true,
+        phoneNumber: true,
+        isImportant: true,
+      },
+    });
+
+    return people.map((person) => ({
+      ...person,
+      image: null,
+    }));
   }
 
   async getCategoryNames(userId: string): Promise<PersonCategoryNamesResponse> {
@@ -297,45 +313,60 @@ export class PeopleService {
     ]);
   }
 
-  private async uploadPeopleFiles(
+  private async assertPhoneNumberIsAvailable(
     userId: string,
-    items: CreatePersonItemDto[],
-    filesByIndex: PersonCreateFilesByIndex,
+    phoneNumber: string,
+  ): Promise<void> {
+    const existingPerson = await this.prisma.person.findFirst({
+      where: {
+        userId,
+        phoneNumber,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existingPerson) {
+      return;
+    }
+
+    throw new ConflictException({
+      code: 'PERSON_PHONE_NUMBER_ALREADY_EXISTS',
+      message: '이미 등록된 전화번호입니다.',
+      phoneNumber,
+    });
+  }
+
+  private async uploadPersonFiles(
+    userId: string,
+    files: PersonCreateFiles,
     uploadedFileKeys: string[],
-  ): Promise<UploadedPersonFiles[]> {
-    const uploadedFiles: UploadedPersonFiles[] = Array.from(
-      { length: items.length },
-      () => ({}),
-    );
+  ): Promise<UploadedPersonFiles> {
+    const uploadedFiles: UploadedPersonFiles = {};
 
-    // filesByIndex에는 파일을 가진 사람만 들어온다. 파일이 없는 사람은 빈 객체로 유지해
-    // items 배열의 index와 uploadedFiles 배열의 index를 계속 맞춘다.
-    for (const [index, files] of filesByIndex.entries()) {
-      if (files.image) {
-        uploadedFiles[index].image = await this.uploadPersonFile(
-          files.image,
-          `people/${userId}/profiles`,
-          uploadedFileKeys,
-        );
-      }
+    if (files.image) {
+      uploadedFiles.image = await this.uploadPersonFile(
+        files.image,
+        `people/${userId}/profiles`,
+        uploadedFileKeys,
+      );
+    }
 
-      if (files.businessCardFrontImage) {
-        uploadedFiles[index].businessCardFrontImage =
-          await this.uploadPersonFile(
-            files.businessCardFrontImage,
-            `people/${userId}/business-cards/front`,
-            uploadedFileKeys,
-          );
-      }
+    if (files.businessCardFrontImage) {
+      uploadedFiles.businessCardFrontImage = await this.uploadPersonFile(
+        files.businessCardFrontImage,
+        `people/${userId}/business-cards/front`,
+        uploadedFileKeys,
+      );
+    }
 
-      if (files.businessCardBackImage) {
-        uploadedFiles[index].businessCardBackImage =
-          await this.uploadPersonFile(
-            files.businessCardBackImage,
-            `people/${userId}/business-cards/back`,
-            uploadedFileKeys,
-          );
-      }
+    if (files.businessCardBackImage) {
+      uploadedFiles.businessCardBackImage = await this.uploadPersonFile(
+        files.businessCardBackImage,
+        `people/${userId}/business-cards/back`,
+        uploadedFileKeys,
+      );
     }
 
     return uploadedFiles;
