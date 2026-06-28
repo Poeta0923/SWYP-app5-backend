@@ -2,15 +2,17 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { AnyFilesInterceptor } from '@nestjs/platform-express';
+import { AnyFilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -33,6 +35,7 @@ import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { CreatePersonMultipartDto } from './dto/create-person-multipart.dto';
 import { CreatePersonItemDto } from './dto/create-person-item.dto';
 import { ImportPeopleDto } from './dto/import-people.dto';
+import { PersonProfileImageMultipartDto } from './dto/person-profile-image-multipart.dto';
 import { UpdatePersonItemDto } from './dto/update-person-item.dto';
 import { PersonCategoryNamesEntity } from './entities/person-category-names.entity';
 import {
@@ -50,6 +53,32 @@ const PERSON_IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 // 단일 인물 등록 multipart 파일 필드명이다.
 const PERSON_FILE_FIELD_PATTERN =
   /^(image|businessCardFrontImage|businessCardBackImage)$/;
+const PERSON_PROFILE_IMAGE_FILE_FIELD_NAME = 'image';
+const PERSON_IMAGE_FILE_INTERCEPTOR_OPTIONS = {
+  limits: {
+    fileSize: PERSON_IMAGE_FILE_SIZE_LIMIT_BYTES,
+  },
+  fileFilter: (
+    _request: unknown,
+    file: { fieldname: string; mimetype: string },
+    callback: (error: Error | null, acceptFile: boolean) => void,
+  ) => {
+    if (file.fieldname !== PERSON_PROFILE_IMAGE_FILE_FIELD_NAME) {
+      callback(
+        new BadRequestException(`Invalid file field name: ${file.fieldname}`),
+        false,
+      );
+      return;
+    }
+
+    if (!file.mimetype.startsWith('image/')) {
+      callback(new BadRequestException('Only image files are allowed.'), false);
+      return;
+    }
+
+    callback(null, true);
+  },
+};
 interface UploadedPersonMultipartFile extends PersonImageFile {
   fieldname: string;
 }
@@ -217,6 +246,117 @@ export class PeopleController {
     return this.peopleService.getPerson(currentUser.sub, personId);
   }
 
+  @Post(':personId/profile-image')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @UseInterceptors(
+    FileInterceptor(
+      PERSON_PROFILE_IMAGE_FILE_FIELD_NAME,
+      PERSON_IMAGE_FILE_INTERCEPTOR_OPTIONS,
+    ),
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '인물 프로필 이미지 추가',
+    description:
+      '프로필 이미지가 없는 인물에게 프로필 이미지를 추가합니다. 인물 1명당 프로필 이미지는 1개만 가질 수 있습니다.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: PersonProfileImageMultipartDto })
+  @ApiCreatedResponse({
+    description: '프로필 이미지 추가 성공',
+    type: PersonEntity,
+  })
+  @ApiBadRequestResponse({
+    description: '파일 검증 실패',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '인물을 찾을 수 없음',
+  })
+  addPersonProfileImage(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('personId') personId: string,
+    @UploadedFile() image: UploadedPersonMultipartFile | undefined,
+  ) {
+    return this.peopleService.addPersonProfileImage(
+      currentUser.sub,
+      personId,
+      this.requireProfileImage(image),
+    );
+  }
+
+  @Patch(':personId/profile-image')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @UseInterceptors(
+    FileInterceptor(
+      PERSON_PROFILE_IMAGE_FILE_FIELD_NAME,
+      PERSON_IMAGE_FILE_INTERCEPTOR_OPTIONS,
+    ),
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '인물 프로필 이미지 변경' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: PersonProfileImageMultipartDto })
+  @ApiOkResponse({
+    description: '프로필 이미지 변경 성공',
+    type: PersonEntity,
+  })
+  @ApiBadRequestResponse({
+    description: '파일 검증 실패',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '인물 또는 프로필 이미지를 찾을 수 없음',
+  })
+  updatePersonProfileImage(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('personId') personId: string,
+    @UploadedFile() image: UploadedPersonMultipartFile | undefined,
+  ) {
+    return this.peopleService.updatePersonProfileImage(
+      currentUser.sub,
+      personId,
+      this.requireProfileImage(image),
+    );
+  }
+
+  @Delete(':personId/profile-image')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '인물 프로필 이미지 삭제' })
+  @ApiOkResponse({
+    description: '프로필 이미지 삭제 성공',
+    type: PersonEntity,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '인물 또는 프로필 이미지를 찾을 수 없음',
+  })
+  deletePersonProfileImage(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('personId') personId: string,
+  ) {
+    return this.peopleService.deletePersonProfileImage(
+      currentUser.sub,
+      personId,
+    );
+  }
+
   @Patch(':personId')
   @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
   @ApiBearerAuth('access-token')
@@ -313,5 +453,15 @@ export class PeopleController {
     }
 
     return personFiles;
+  }
+
+  private requireProfileImage(
+    file: UploadedPersonMultipartFile | undefined,
+  ): PersonImageFile {
+    if (!file) {
+      throw new BadRequestException('image is required.');
+    }
+
+    return file;
   }
 }

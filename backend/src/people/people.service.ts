@@ -112,6 +112,15 @@ interface PersonProfileImageFile {
   s3Key: string;
 }
 
+interface ExistingPersonProfileImageFile extends PersonProfileImageFile {
+  id: string;
+}
+
+type ExistingPersonForProfileImage = {
+  id: string;
+  profileImageFile: ExistingPersonProfileImageFile | null;
+};
+
 interface UploadedPersonStorageFile extends UploadedS3File {
   originalName?: string;
 }
@@ -503,6 +512,171 @@ export class PeopleService {
     });
   }
 
+  async addPersonProfileImage(
+    userId: string,
+    personId: string,
+    image: PersonImageFile,
+  ): Promise<PersonDetailResponse> {
+    const existingPerson = await this.findExistingPersonForProfileImage(
+      userId,
+      personId,
+    );
+
+    if (existingPerson.profileImageFile) {
+      throw new ConflictException({
+        code: 'PERSON_PROFILE_IMAGE_ALREADY_EXISTS',
+        message: '이미 프로필 이미지가 등록되어 있습니다.',
+        personId,
+      });
+    }
+
+    const uploadedFileKeys: string[] = [];
+
+    try {
+      const uploadedImage = await this.uploadPersonFile(
+        image,
+        `people/${userId}/profiles`,
+        uploadedFileKeys,
+      );
+
+      return await this.prisma.$transaction(async (tx) => {
+        const profileImageFile = await tx.mediaFile.create({
+          data: this.toMediaFileCreateData(
+            userId,
+            uploadedImage,
+            MediaFileUsage.PERSON_PROFILE,
+          ),
+        });
+        const updateResult = await tx.person.updateMany({
+          where: {
+            id: personId,
+            userId,
+            profileImageFileId: null,
+          },
+          data: {
+            profileImageFileId: profileImageFile.id,
+          },
+        });
+
+        if (updateResult.count !== 1) {
+          throw new ConflictException({
+            code: 'PERSON_PROFILE_IMAGE_ALREADY_EXISTS',
+            message: '이미 프로필 이미지가 등록되어 있습니다.',
+            personId,
+          });
+        }
+
+        return this.findPersonDetailOrThrow(tx, userId, personId);
+      });
+    } catch (error) {
+      await this.deleteUploadedFiles(uploadedFileKeys);
+      throw error;
+    }
+  }
+
+  async updatePersonProfileImage(
+    userId: string,
+    personId: string,
+    image: PersonImageFile,
+  ): Promise<PersonDetailResponse> {
+    const existingPerson = await this.findExistingPersonForProfileImage(
+      userId,
+      personId,
+    );
+    const existingImage = this.requireExistingProfileImage(
+      existingPerson,
+      personId,
+    );
+    const uploadedFileKeys: string[] = [];
+
+    try {
+      const uploadedImage = await this.uploadPersonFile(
+        image,
+        `people/${userId}/profiles`,
+        uploadedFileKeys,
+      );
+      const updatedPerson = await this.prisma.$transaction(async (tx) => {
+        const profileImageFile = await tx.mediaFile.create({
+          data: this.toMediaFileCreateData(
+            userId,
+            uploadedImage,
+            MediaFileUsage.PERSON_PROFILE,
+          ),
+        });
+
+        await tx.person.update({
+          where: {
+            id_userId: {
+              id: personId,
+              userId,
+            },
+          },
+          data: {
+            profileImageFile: {
+              connect: {
+                id: profileImageFile.id,
+              },
+            },
+          },
+        });
+        await tx.mediaFile.delete({
+          where: {
+            id: existingImage.id,
+          },
+        });
+
+        return this.findPersonDetailOrThrow(tx, userId, personId);
+      });
+
+      await this.deleteUploadedFiles([existingImage.s3Key]);
+
+      return updatedPerson;
+    } catch (error) {
+      await this.deleteUploadedFiles(uploadedFileKeys);
+      throw error;
+    }
+  }
+
+  async deletePersonProfileImage(
+    userId: string,
+    personId: string,
+  ): Promise<PersonDetailResponse> {
+    const existingPerson = await this.findExistingPersonForProfileImage(
+      userId,
+      personId,
+    );
+    const existingImage = this.requireExistingProfileImage(
+      existingPerson,
+      personId,
+    );
+    const updatedPerson = await this.prisma.$transaction(async (tx) => {
+      await tx.person.update({
+        where: {
+          id_userId: {
+            id: personId,
+            userId,
+          },
+        },
+        data: {
+          profileImageFile: {
+            disconnect: true,
+          },
+        },
+      });
+      await tx.mediaFile.delete({
+        where: {
+          id: existingImage.id,
+        },
+      });
+
+      return this.findPersonDetailOrThrow(tx, userId, personId);
+    });
+
+    await this.deleteUploadedFiles([existingImage.s3Key]);
+
+    return updatedPerson;
+  }
+
   private async ensureDefaultCategories(userId: string): Promise<void> {
     await this.prisma.$transaction([
       this.prisma.job.createMany({
@@ -573,6 +747,52 @@ export class PeopleService {
     }
 
     return existingPerson;
+  }
+
+  private async findExistingPersonForProfileImage(
+    userId: string,
+    personId: string,
+  ): Promise<ExistingPersonForProfileImage> {
+    const existingPerson = await this.prisma.person.findFirst({
+      where: {
+        id: personId,
+        userId,
+      },
+      select: {
+        id: true,
+        profileImageFile: {
+          select: {
+            id: true,
+            s3Key: true,
+          },
+        },
+      },
+    });
+
+    if (!existingPerson) {
+      throw new NotFoundException({
+        code: 'PERSON_NOT_FOUND',
+        message: '인물을 찾을 수 없습니다.',
+        personId,
+      });
+    }
+
+    return existingPerson;
+  }
+
+  private requireExistingProfileImage(
+    existingPerson: ExistingPersonForProfileImage,
+    personId: string,
+  ): ExistingPersonProfileImageFile {
+    if (!existingPerson.profileImageFile) {
+      throw new NotFoundException({
+        code: 'PERSON_PROFILE_IMAGE_NOT_FOUND',
+        message: '프로필 이미지를 찾을 수 없습니다.',
+        personId,
+      });
+    }
+
+    return existingPerson.profileImageFile;
   }
 
   private assertBirthdayNotificationUpdateIsValid(
@@ -887,6 +1107,30 @@ export class PeopleService {
           originalName: file.originalName,
         }
       : null;
+  }
+
+  private async findPersonDetailOrThrow(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    personId: string,
+  ): Promise<PersonDetailResponse> {
+    const person = await tx.person.findFirst({
+      where: {
+        id: personId,
+        userId,
+      },
+      select: this.personDetailSelect(),
+    });
+
+    if (!person) {
+      throw new NotFoundException({
+        code: 'PERSON_NOT_FOUND',
+        message: '인물을 찾을 수 없습니다.',
+        personId,
+      });
+    }
+
+    return this.toPersonDetailResponse(person);
   }
 
   private toDateOnlyString(date: Date | null): string | null {

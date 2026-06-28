@@ -20,6 +20,9 @@ describe('PeopleController', () => {
     getPeople: jest.Mock;
     getPerson: jest.Mock;
     updatePerson: jest.Mock;
+    addPersonProfileImage: jest.Mock;
+    updatePersonProfileImage: jest.Mock;
+    deletePersonProfileImage: jest.Mock;
     getCategoryNames: jest.Mock;
   };
   let controller: PeopleController;
@@ -31,6 +34,9 @@ describe('PeopleController', () => {
       getPeople: jest.fn().mockResolvedValue([]),
       getPerson: jest.fn().mockResolvedValue({}),
       updatePerson: jest.fn().mockResolvedValue({}),
+      addPersonProfileImage: jest.fn().mockResolvedValue({}),
+      updatePersonProfileImage: jest.fn().mockResolvedValue({}),
+      deletePersonProfileImage: jest.fn().mockResolvedValue({}),
       getCategoryNames: jest.fn().mockResolvedValue({
         jobs: [],
         companies: [],
@@ -199,6 +205,112 @@ describe('PeopleController', () => {
         company: '토스',
         extraContacts: [],
       },
+    );
+  });
+
+  it('registers POST /people/:personId/profile-image and adds one profile image', async () => {
+    const addProfileImageHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'addPersonProfileImage',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const image = {
+      fieldname: 'image',
+      buffer: Buffer.from('image'),
+      mimetype: 'image/png',
+      originalname: 'profile.png',
+      size: 5,
+    };
+
+    await expect(
+      controller.addPersonProfileImage(currentUser, 'person-1', image),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, addProfileImageHandler)).toBe(
+      ':personId/profile-image',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, addProfileImageHandler)).toBe(
+      RequestMethod.POST,
+    );
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, addProfileImageHandler),
+    ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
+    expect(peopleService.addPersonProfileImage).toHaveBeenCalledWith(
+      'user-1',
+      'person-1',
+      image,
+    );
+  });
+
+  it('registers PATCH /people/:personId/profile-image and updates one profile image', async () => {
+    const updateProfileImageHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'updatePersonProfileImage',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const image = {
+      fieldname: 'image',
+      buffer: Buffer.from('image'),
+      mimetype: 'image/png',
+      originalname: 'profile.png',
+      size: 5,
+    };
+
+    await expect(
+      controller.updatePersonProfileImage(currentUser, 'person-1', image),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, updateProfileImageHandler)).toBe(
+      ':personId/profile-image',
+    );
+    expect(
+      Reflect.getMetadata(METHOD_METADATA, updateProfileImageHandler),
+    ).toBe(RequestMethod.PATCH);
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, updateProfileImageHandler),
+    ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
+    expect(peopleService.updatePersonProfileImage).toHaveBeenCalledWith(
+      'user-1',
+      'person-1',
+      image,
+    );
+  });
+
+  it('registers DELETE /people/:personId/profile-image and deletes one profile image', async () => {
+    const deleteProfileImageHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'deletePersonProfileImage',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(
+      controller.deletePersonProfileImage(currentUser, 'person-1'),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, deleteProfileImageHandler)).toBe(
+      ':personId/profile-image',
+    );
+    expect(
+      Reflect.getMetadata(METHOD_METADATA, deleteProfileImageHandler),
+    ).toBe(RequestMethod.DELETE);
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, deleteProfileImageHandler),
+    ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
+    expect(peopleService.deletePersonProfileImage).toHaveBeenCalledWith(
+      'user-1',
+      'person-1',
     );
   });
 
@@ -381,6 +493,23 @@ describe('PeopleController', () => {
         [image, image],
       ),
     ).toThrow(BadRequestException);
+  });
+
+  it('requires a profile image file for profile image create and update', () => {
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    expect(() =>
+      controller.addPersonProfileImage(currentUser, 'person-1', undefined),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      controller.updatePersonProfileImage(currentUser, 'person-1', undefined),
+    ).toThrow(BadRequestException);
+    expect(peopleService.addPersonProfileImage).not.toHaveBeenCalled();
+    expect(peopleService.updatePersonProfileImage).not.toHaveBeenCalled();
   });
 
   it('validates import people payloads', () => {
