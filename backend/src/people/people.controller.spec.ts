@@ -78,7 +78,9 @@ describe('PeopleController', () => {
       ],
     });
 
-    await expect(controller.importPeople(currentUser, dto)).resolves.toEqual([]);
+    await expect(controller.importPeople(currentUser, dto)).resolves.toEqual(
+      [],
+    );
 
     expect(Reflect.getMetadata(PATH_METADATA, importPeopleHandler)).toBe(
       'import',
@@ -154,7 +156,8 @@ describe('PeopleController', () => {
           name: ' 홍길동 ',
           phoneNumber: ' 010-1234-5678 ',
           isImportant: 'true',
-          birthdayNotificationEnabled: false,
+          birthdayNotificationEnabled: 'true',
+          birthdayNotificationOffsetDays: '1',
           extraContacts: [
             {
               type: ' email ',
@@ -175,7 +178,8 @@ describe('PeopleController', () => {
         name: '홍길동',
         phoneNumber: '010-1234-5678',
         isImportant: true,
-        birthdayNotificationEnabled: false,
+        birthdayNotificationEnabled: true,
+        birthdayNotificationOffsetDays: 1,
         extraContacts: [
           {
             type: 'email',
@@ -223,6 +227,29 @@ describe('PeopleController', () => {
           name: '홍길동',
           phoneNumber: '010-1234-5678',
           unknown: 'field',
+        }),
+        [],
+      ),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      controller.createPerson(
+        currentUser,
+        JSON.stringify({
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+          birthdayNotificationEnabled: true,
+        }),
+        [],
+      ),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      controller.createPerson(
+        currentUser,
+        JSON.stringify({
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+          birthdayNotificationEnabled: true,
+          birthdayNotificationOffsetDays: -1,
         }),
         [],
       ),

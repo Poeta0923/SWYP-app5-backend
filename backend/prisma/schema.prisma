@@ -176,7 +176,7 @@ model Person {
   relationship                String?
   personality                 String?
   birthdayNotificationEnabled Boolean           @default(false) @map("birthday_notification_enabled")
-  scheduleNotificationEnabled Boolean           @default(false) @map("schedule_notification_enabled")
+  birthdayNotificationOffsetDays Int?           @map("birthday_notification_offset_days")
   businessCards               BusinessCard[]
   extraContacts               ExtraContact[]
   schedules                   SchedulePerson[]

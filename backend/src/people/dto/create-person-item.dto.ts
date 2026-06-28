@@ -3,9 +3,12 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsInt,
   IsOptional,
   IsString,
+  Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -49,6 +52,24 @@ const optionalBoolean = ({ value }: { value: unknown }) => {
   }
 
   return value;
+};
+
+const optionalInteger = ({ value }: { value: unknown }) => {
+  if (value === '' || value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length === 0 ? undefined : Number(trimmedValue);
 };
 
 export class CreateExtraContactDto {
@@ -114,10 +135,14 @@ export class CreatePersonItemDto {
   @IsBoolean()
   birthdayNotificationEnabled?: boolean;
 
-  @Transform(optionalBoolean)
-  @IsOptional()
-  @IsBoolean()
-  scheduleNotificationEnabled?: boolean;
+  @Transform(optionalInteger)
+  @ValidateIf(
+    (person: CreatePersonItemDto) =>
+      person.birthdayNotificationEnabled === true,
+  )
+  @IsInt()
+  @Min(0)
+  birthdayNotificationOffsetDays?: number;
 
   @IsOptional()
   @IsArray()
