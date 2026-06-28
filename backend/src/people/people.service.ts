@@ -84,24 +84,10 @@ export interface CreatedPersonResponse {
     frontImageFile: {
       id: string;
       url: string;
-      type: MediaFileType;
-      usage: MediaFileUsage;
-      bucket: string;
-      s3Key: string;
-      contentType: string;
-      sizeBytes: number;
-      originalName: string | null;
     } | null;
     backImageFile: {
       id: string;
       url: string;
-      type: MediaFileType;
-      usage: MediaFileUsage;
-      bucket: string;
-      s3Key: string;
-      contentType: string;
-      sizeBytes: number;
-      originalName: string | null;
     } | null;
   }[];
 }
@@ -146,13 +132,7 @@ type BusinessCardWithMediaFiles = {
 
 type MediaFileResponseSource = {
   id: string;
-  type: MediaFileType;
-  usage: MediaFileUsage;
-  bucket: string;
   s3Key: string;
-  contentType: string;
-  sizeBytes: number;
-  originalName: string | null;
 };
 
 type PersonDetailQueryResult = {
@@ -403,25 +383,13 @@ export class PeopleService {
             frontImageFile: {
               select: {
                 id: true,
-                type: true,
-                usage: true,
-                bucket: true,
                 s3Key: true,
-                contentType: true,
-                sizeBytes: true,
-                originalName: true,
               },
             },
             backImageFile: {
               select: {
                 id: true,
-                type: true,
-                usage: true,
-                bucket: true,
                 s3Key: true,
-                contentType: true,
-                sizeBytes: true,
-                originalName: true,
               },
             },
           },
@@ -1098,13 +1066,6 @@ export class PeopleService {
       ? {
           id: file.id,
           url: this.s3Service.getSignedUrl(file.s3Key),
-          type: file.type,
-          usage: file.usage,
-          bucket: file.bucket,
-          s3Key: file.s3Key,
-          contentType: file.contentType,
-          sizeBytes: file.sizeBytes,
-          originalName: file.originalName,
         }
       : null;
   }
@@ -1189,25 +1150,13 @@ export class PeopleService {
           frontImageFile: {
             select: {
               id: true,
-              type: true,
-              usage: true,
-              bucket: true,
               s3Key: true,
-              contentType: true,
-              sizeBytes: true,
-              originalName: true,
             },
           },
           backImageFile: {
             select: {
               id: true,
-              type: true,
-              usage: true,
-              bucket: true,
               s3Key: true,
-              contentType: true,
-              sizeBytes: true,
-              originalName: true,
             },
           },
         },
