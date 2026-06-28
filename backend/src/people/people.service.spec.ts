@@ -28,6 +28,7 @@ interface TestTransactionClient {
     createManyAndReturn: jest.Mock;
     findFirst: jest.Mock;
     findMany: jest.Mock;
+    update: jest.Mock;
   };
   mediaFile: {
     create: jest.Mock;
@@ -37,6 +38,7 @@ interface TestTransactionClient {
   };
   extraContact: {
     create: jest.Mock;
+    deleteMany: jest.Mock;
   };
 }
 
@@ -100,6 +102,7 @@ describe('PeopleService', () => {
         createManyAndReturn: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
       },
       mediaFile: {
         create: jest.fn(),
@@ -109,6 +112,7 @@ describe('PeopleService', () => {
       },
       extraContact: {
         create: jest.fn(),
+        deleteMany: jest.fn(),
       },
     };
     s3Service = {
@@ -412,6 +416,224 @@ describe('PeopleService', () => {
     });
     await expect(
       service.getPerson('user-1', 'person-missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('updates person fields without touching profile image, business cards, or extra contacts when omitted', async () => {
+    const updatedPerson = {
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: null,
+      isImportant: true,
+      phoneNumber: '010-1234-5678',
+      job: null,
+      company: '토스',
+      position: null,
+      relationship: null,
+      personality: '꼼꼼함',
+      birthdayNotificationEnabled: false,
+      birthdayNotificationOffsetDays: null,
+      profileImageFile: {
+        s3Key: 'profiles/profile.png',
+      },
+      extraContacts: [
+        {
+          id: 'extra-contact-1',
+          type: 'email',
+          content: 'user@example.com',
+        },
+      ],
+      businessCards: [],
+    };
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        phoneNumber: '010-1234-5678',
+        birthdayNotificationEnabled: true,
+        birthdayNotificationOffsetDays: 1,
+      })
+      .mockResolvedValueOnce(updatedPerson);
+
+    const { profileImageFile: _profileImageFile, ...expectedPerson } =
+      updatedPerson;
+
+    await expect(
+      service.updatePerson('user-1', 'person-1', {
+        name: '홍길동',
+        birthDate: null,
+        isImportant: true,
+        company: '토스',
+        personality: '꼼꼼함',
+        birthdayNotificationEnabled: false,
+      }),
+    ).resolves.toEqual({
+      ...expectedPerson,
+      birthDate: null,
+      image: 'https://signed.example.com/profiles/profile.png',
+      businessCards: [],
+    });
+
+    expect(prisma.company.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', name: '토스' }],
+      skipDuplicates: true,
+    });
+    expect(prisma.person.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'person-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        name: '홍길동',
+        birthDate: null,
+        isImportant: true,
+        company: '토스',
+        personality: '꼼꼼함',
+        birthdayNotificationEnabled: false,
+        birthdayNotificationOffsetDays: null,
+      },
+    });
+    expect(prisma.extraContact.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.extraContact.create).not.toHaveBeenCalled();
+    expect(s3Service.uploadFile).not.toHaveBeenCalled();
+    expect(prisma.mediaFile.create).not.toHaveBeenCalled();
+    expect(prisma.businessCard.create).not.toHaveBeenCalled();
+  });
+
+  it('replaces extra contacts only when extraContacts is present', async () => {
+    const updatedPerson = {
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: null,
+      isImportant: false,
+      phoneNumber: '010-1234-5678',
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      birthdayNotificationOffsetDays: null,
+      profileImageFile: null,
+      extraContacts: [],
+      businessCards: [],
+    };
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        phoneNumber: '010-1234-5678',
+        birthdayNotificationEnabled: false,
+        birthdayNotificationOffsetDays: null,
+      })
+      .mockResolvedValueOnce(updatedPerson);
+
+    const { profileImageFile: _profileImageFile, ...expectedPerson } =
+      updatedPerson;
+
+    await expect(
+      service.updatePerson('user-1', 'person-1', {
+        extraContacts: [],
+      }),
+    ).resolves.toEqual({
+      ...expectedPerson,
+      birthDate: null,
+      image: null,
+      businessCards: [],
+    });
+
+    expect(prisma.person.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'person-1',
+          userId: 'user-1',
+        },
+      },
+      data: {},
+    });
+    expect(prisma.extraContact.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        personId: 'person-1',
+      },
+    });
+    expect(prisma.extraContact.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate phone numbers on person update excluding the current person', async () => {
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        phoneNumber: '010-1234-5678',
+        birthdayNotificationEnabled: false,
+        birthdayNotificationOffsetDays: null,
+      })
+      .mockResolvedValueOnce({ id: 'person-2' });
+
+    await expect(
+      service.updatePerson('user-1', 'person-1', {
+        phoneNumber: '010-9999-0000',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PERSON_PHONE_NUMBER_ALREADY_EXISTS',
+        message: '이미 등록된 전화번호입니다.',
+        phoneNumber: '010-9999-0000',
+      },
+    });
+
+    expect(prisma.person.findFirst).toHaveBeenNthCalledWith(2, {
+      where: {
+        userId: 'user-1',
+        phoneNumber: '010-9999-0000',
+        id: { not: 'person-1' },
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.person.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid birthday notification update final state', async () => {
+    prisma.person.findFirst.mockResolvedValueOnce({
+      id: 'person-1',
+      phoneNumber: '010-1234-5678',
+      birthdayNotificationEnabled: true,
+      birthdayNotificationOffsetDays: 1,
+    });
+
+    await expect(
+      service.updatePerson('user-1', 'person-1', {
+        birthdayNotificationOffsetDays: null,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'BIRTHDAY_NOTIFICATION_OFFSET_REQUIRED',
+        message: '생일 알림을 켜려면 알림 기준일이 필요합니다.',
+      },
+    });
+    expect(prisma.person.update).not.toHaveBeenCalled();
+  });
+
+  it('throws not found when updating a missing current user person', async () => {
+    prisma.person.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updatePerson('user-1', 'person-missing', {
+        name: '홍길동',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PERSON_NOT_FOUND',
+        message: '인물을 찾을 수 없습니다.',
+        personId: 'person-missing',
+      },
+    });
+    await expect(
+      service.updatePerson('user-1', 'person-missing', {
+        name: '홍길동',
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 

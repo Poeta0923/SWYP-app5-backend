@@ -9,6 +9,7 @@ import { validateSync } from 'class-validator';
 import { RequiredAgreementsGuard } from '../agreements/required-agreements.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ImportPeopleDto } from './dto/import-people.dto';
+import { UpdatePersonItemDto } from './dto/update-person-item.dto';
 import { PeopleController } from './people.controller';
 import { PeopleService } from './people.service';
 
@@ -18,6 +19,7 @@ describe('PeopleController', () => {
     importPeople: jest.Mock;
     getPeople: jest.Mock;
     getPerson: jest.Mock;
+    updatePerson: jest.Mock;
     getCategoryNames: jest.Mock;
   };
   let controller: PeopleController;
@@ -28,6 +30,7 @@ describe('PeopleController', () => {
       importPeople: jest.fn().mockResolvedValue([]),
       getPeople: jest.fn().mockResolvedValue([]),
       getPerson: jest.fn().mockResolvedValue({}),
+      updatePerson: jest.fn().mockResolvedValue({}),
       getCategoryNames: jest.fn().mockResolvedValue({
         jobs: [],
         companies: [],
@@ -156,6 +159,47 @@ describe('PeopleController', () => {
       RequiredAgreementsGuard,
     ]);
     expect(peopleService.getPerson).toHaveBeenCalledWith('user-1', 'person-1');
+  });
+
+  it('registers PATCH /people/:personId/update behind auth and required agreements guards and updates one person', async () => {
+    const updatePersonHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'updatePerson',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const dto = plainToInstance(UpdatePersonItemDto, {
+      name: ' 홍길동 ',
+      company: ' 토스 ',
+      extraContacts: [],
+    });
+
+    await expect(
+      controller.updatePerson(currentUser, 'person-1', dto),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, updatePersonHandler)).toBe(
+      ':personId/update',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, updatePersonHandler)).toBe(
+      RequestMethod.PATCH,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, updatePersonHandler)).toEqual([
+      JwtAuthGuard,
+      RequiredAgreementsGuard,
+    ]);
+    expect(peopleService.updatePerson).toHaveBeenCalledWith(
+      'user-1',
+      'person-1',
+      {
+        name: '홍길동',
+        company: '토스',
+        extraContacts: [],
+      },
+    );
   });
 
   it('parses person JSON and maps files to service input', async () => {
@@ -381,6 +425,70 @@ describe('PeopleController', () => {
 
     for (const payload of invalidPayloads) {
       const dto = plainToInstance(ImportPeopleDto, payload);
+
+      expect(
+        validateSync(dto, {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+        }).length,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it('validates update person payloads and rejects image fields', () => {
+    const validDto = plainToInstance(UpdatePersonItemDto, {
+      name: ' 홍길동 ',
+      birthDate: '',
+      isImportant: 'true',
+      phoneNumber: ' 010-1234-5678 ',
+      job: '',
+      birthdayNotificationOffsetDays: '1',
+      extraContacts: [
+        {
+          type: ' email ',
+          content: ' user@example.com ',
+        },
+      ],
+    });
+
+    expect(
+      validateSync(validDto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    ).toEqual([]);
+    expect(validDto).toEqual({
+      name: '홍길동',
+      birthDate: null,
+      isImportant: true,
+      phoneNumber: '010-1234-5678',
+      job: null,
+      birthdayNotificationOffsetDays: 1,
+      extraContacts: [
+        {
+          type: 'email',
+          content: 'user@example.com',
+        },
+      ],
+    });
+
+    const invalidPayloads = [
+      { name: '' },
+      { name: null },
+      { phoneNumber: '' },
+      { phoneNumber: null },
+      { isImportant: null },
+      { birthdayNotificationEnabled: null },
+      { birthdayNotificationOffsetDays: -1 },
+      { extraContacts: null },
+      { extraContacts: [{ type: 'email' }] },
+      { image: 'https://example.com/profile.png' },
+      { businessCards: [] },
+      { businessCardFrontImage: 'https://example.com/front.png' },
+    ];
+
+    for (const payload of invalidPayloads) {
+      const dto = plainToInstance(UpdatePersonItemDto, payload);
 
       expect(
         validateSync(dto, {
