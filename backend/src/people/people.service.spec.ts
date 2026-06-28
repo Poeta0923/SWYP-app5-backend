@@ -196,6 +196,7 @@ describe('PeopleService', () => {
         name: '홍길동',
         phoneNumber: '010-1234-5678',
         isImportant: true,
+        updatedAt: new Date('2026-06-28T08:00:00.000Z'),
         profileImageFile: {
           s3Key: 'profiles/profile.png',
         },
@@ -205,6 +206,7 @@ describe('PeopleService', () => {
         name: '김영희',
         phoneNumber: '010-9999-0000',
         isImportant: false,
+        updatedAt: new Date('2026-06-28T09:00:00.000Z'),
         profileImageFile: null,
       },
     ]);
@@ -216,6 +218,7 @@ describe('PeopleService', () => {
         phoneNumber: '010-1234-5678',
         image: 'https://signed.example.com/profiles/profile.png',
         isImportant: true,
+        updatedAt: '2026-06-28T08:00:00.000Z',
       },
       {
         id: 'person-2',
@@ -223,6 +226,7 @@ describe('PeopleService', () => {
         phoneNumber: '010-9999-0000',
         image: null,
         isImportant: false,
+        updatedAt: '2026-06-28T09:00:00.000Z',
       },
     ]);
 
@@ -233,6 +237,7 @@ describe('PeopleService', () => {
         name: true,
         phoneNumber: true,
         isImportant: true,
+        updatedAt: true,
         profileImageFile: {
           select: {
             s3Key: true,
