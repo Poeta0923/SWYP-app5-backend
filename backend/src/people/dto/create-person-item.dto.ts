@@ -80,9 +80,9 @@ export class CreatePersonItemDto {
   isImportant?: boolean;
 
   @Transform(emptyStringToUndefined)
-  @IsOptional()
   @IsString()
-  phoneNumber?: string;
+  @MinLength(1)
+  phoneNumber!: string;
 
   @Transform(emptyStringToUndefined)
   @IsOptional()

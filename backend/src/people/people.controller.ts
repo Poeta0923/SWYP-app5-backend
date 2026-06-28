@@ -28,24 +28,23 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { CreatePersonItemDto } from './dto/create-person-item.dto';
+import { ImportPeopleDto } from './dto/import-people.dto';
 import { PersonCategoryNamesEntity } from './entities/person-category-names.entity';
 import { PersonEntity, PersonListItemEntity } from './entities/person.entity';
 import {
   type PersonCreateFiles,
-  type PersonCreateFilesByIndex,
   type PersonImageFile,
   PeopleService,
 } from './people.service';
 
 const PERSON_IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
-// multipart에서 파일은 people JSON 배열의 index와 필드명으로 매핑한다.
-// 예: people[0].image, people[1].businessCardFrontImage
+// 단일 인물 등록 multipart 파일 필드명이다.
 const PERSON_FILE_FIELD_PATTERN =
-  /^people\[(\d+)\]\.(image|businessCardFrontImage|businessCardBackImage)$/;
-const CREATE_PEOPLE_MULTIPART_DESCRIPTION = [
-  '`people`에는 Person 생성 정보 JSON 배열 문자열을 넣습니다.',
-  '파일은 `people[0].image`처럼 배열 index로 매핑합니다.',
-  '1명 등록도 배열로 전송합니다. 자세한 예시는 `people` 필드 예시를 참고하세요.',
+  /^(image|businessCardFrontImage|businessCardBackImage)$/;
+const CREATE_PERSON_MULTIPART_DESCRIPTION = [
+  '`person`에는 Person 생성 정보 JSON 객체 문자열을 넣습니다.',
+  '파일은 `image`, `businessCardFrontImage`, `businessCardBackImage` 필드로 전송합니다.',
+  '`/people/import`는 기기 연락처 초기 가져오기용이고, 이 API는 단일 인물 상세 등록용입니다.',
 ].join('\n');
 
 interface UploadedPersonMultipartFile extends PersonImageFile {
@@ -56,6 +55,36 @@ interface UploadedPersonMultipartFile extends PersonImageFile {
 @Controller('people')
 export class PeopleController {
   constructor(private readonly peopleService: PeopleService) {}
+
+  @Post('import')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '기기 연락처 인물 일괄 가져오기',
+    description:
+      '서비스 가입 초기 기기 연락처에서 가져온 이름과 전화번호만 일괄 저장합니다.',
+  })
+  @ApiBody({ type: ImportPeopleDto })
+  @ApiCreatedResponse({
+    description: '연락처 인물 일괄 저장 성공',
+    type: PersonListItemEntity,
+    isArray: true,
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  importPeople(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Body() dto: ImportPeopleDto,
+  ) {
+    return this.peopleService.importPeople(currentUser.sub, dto.people);
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
@@ -89,76 +118,63 @@ export class PeopleController {
   )
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '인물 일괄 등록',
-    description: CREATE_PEOPLE_MULTIPART_DESCRIPTION,
+    summary: '단일 인물 등록',
+    description: CREATE_PERSON_MULTIPART_DESCRIPTION,
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['people'],
+      required: ['person'],
       properties: {
-        people: {
+        person: {
           type: 'string',
-          description: 'Person 생성 정보 JSON 문자열 배열',
-          example: JSON.stringify([
-            {
-              name: '홍길동',
-              birthDate: '1990-01-01',
-              isImportant: true,
-              phoneNumber: '010-1234-5678',
-              job: '개발/IT',
-              company: '토스',
-              position: '과장',
-              relationship: '동료',
-              personality: '차분하고 꼼꼼함',
-              birthdayNotificationEnabled: true,
-              scheduleNotificationEnabled: false,
-              extraContacts: [
-                {
-                  type: 'email',
-                  content: 'user@example.com',
-                },
-                {
-                  type: 'instagram',
-                  content: '@hong',
-                },
-              ],
-            },
-            {
-              name: '김영희',
-              company: '카카오',
-              extraContacts: [
-                {
-                  type: 'email',
-                  content: 'kim@example.com',
-                },
-              ],
-            },
-          ]),
+          description: 'Person 생성 정보 JSON 객체 문자열',
+          example: JSON.stringify({
+            name: '홍길동',
+            birthDate: '1990-01-01',
+            isImportant: true,
+            phoneNumber: '010-1234-5678',
+            job: '개발/IT',
+            company: '토스',
+            position: '과장',
+            relationship: '동료',
+            personality: '차분하고 꼼꼼함',
+            birthdayNotificationEnabled: true,
+            scheduleNotificationEnabled: false,
+            extraContacts: [
+              {
+                type: 'email',
+                content: 'user@example.com',
+              },
+              {
+                type: 'instagram',
+                content: '@hong',
+              },
+            ],
+          }),
         },
-        'people[0].image': {
+        image: {
           type: 'string',
           format: 'binary',
-          description: '0번째 인물 프로필 이미지',
+          description: '프로필 이미지',
         },
-        'people[0].businessCardFrontImage': {
+        businessCardFrontImage: {
           type: 'string',
           format: 'binary',
-          description: '0번째 인물 명함 앞면 이미지',
+          description: '명함 앞면 이미지',
         },
-        'people[0].businessCardBackImage': {
+        businessCardBackImage: {
           type: 'string',
           format: 'binary',
-          description: '0번째 인물 명함 뒷면 이미지',
+          description: '명함 뒷면 이미지',
         },
       },
     },
   })
   @ApiCreatedResponse({
-    description: '인물 일괄 등록 성공',
+    description: '인물 등록 성공',
     type: PersonEntity,
-    isArray: true,
   })
   @ApiBadRequestResponse({
     description: '요청 body 또는 파일 검증 실패',
@@ -169,19 +185,15 @@ export class PeopleController {
   @ApiForbiddenResponse({
     description: '필수 약관 미동의',
   })
-  createPeople(
+  createPerson(
     @CurrentUser() currentUser: JwtAccessPayload,
-    @Body('people') peopleJson: string | undefined,
+    @Body('person') personJson: string | undefined,
     @UploadedFiles() files: UploadedPersonMultipartFile[] = [],
   ) {
-    const people = this.parsePeople(peopleJson);
-    const filesByIndex = this.mapFilesToPeople(people.length, files);
+    const person = this.parsePerson(personJson);
+    const personFiles = this.mapFilesToPerson(files);
 
-    return this.peopleService.createPeople(
-      currentUser.sub,
-      people,
-      filesByIndex,
-    );
+    return this.peopleService.createPerson(currentUser.sub, person, personFiles);
   }
 
   @Get()
@@ -222,63 +234,48 @@ export class PeopleController {
     return this.peopleService.getCategoryNames(currentUser.sub);
   }
 
-  private parsePeople(peopleJson: string | undefined): CreatePersonItemDto[] {
-    if (!peopleJson) {
-      throw new BadRequestException('people is required.');
+  private parsePerson(personJson: string | undefined): CreatePersonItemDto {
+    if (!personJson) {
+      throw new BadRequestException('person is required.');
     }
 
-    let parsedPeople: unknown;
+    let parsedPerson: unknown;
 
     try {
-      parsedPeople = JSON.parse(peopleJson);
+      parsedPerson = JSON.parse(personJson);
     } catch {
-      throw new BadRequestException('people must be a valid JSON array.');
-    }
-
-    if (!Array.isArray(parsedPeople)) {
-      throw new BadRequestException('people must be a JSON array.');
-    }
-
-    if (parsedPeople.length === 0) {
-      throw new BadRequestException('people must contain at least one item.');
+      throw new BadRequestException('person must be a valid JSON object.');
     }
 
     if (
-      parsedPeople.some(
-        (person) =>
-          typeof person !== 'object' ||
-          person === null ||
-          Array.isArray(person),
-      )
+      typeof parsedPerson !== 'object' ||
+      parsedPerson === null ||
+      Array.isArray(parsedPerson)
     ) {
-      throw new BadRequestException('people items must be objects.');
+      throw new BadRequestException('person must be a JSON object.');
     }
 
-    // people는 multipart의 문자열 필드라 전역 ValidationPipe가 nested item까지
+    // person은 multipart의 문자열 필드라 전역 ValidationPipe가 nested item까지
     // 자동 검증하지 않는다. JSON parse 이후 DTO 인스턴스로 바꿔 직접 검증한다.
-    const people = plainToInstance(CreatePersonItemDto, parsedPeople);
-    const errors = people.flatMap((person) =>
-      validateSync(person, {
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
+    const person = plainToInstance(CreatePersonItemDto, parsedPerson);
+    const errors = validateSync(person, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
 
     if (errors.length > 0) {
-      throw new BadRequestException('people contains invalid item data.');
+      throw new BadRequestException('person contains invalid data.');
     }
 
-    return people;
+    return person;
   }
 
-  private mapFilesToPeople(
-    peopleCount: number,
+  private mapFilesToPerson(
     files: UploadedPersonMultipartFile[],
-  ): PersonCreateFilesByIndex {
-    const filesByIndex: PersonCreateFilesByIndex = new Map();
+  ): PersonCreateFiles {
+    const personFiles: PersonCreateFiles = {};
 
-    // 파일 필드명에 담긴 배열 index를 기준으로 각 Person item에 파일을 묶는다.
-    // 중복 필드와 people 배열 밖 index는 클라이언트 요청 오류로 처리한다.
+    // 단일 인물 등록에서는 각 파일 필드를 한 번씩만 허용한다.
     for (const file of files) {
       const match = PERSON_FILE_FIELD_PATTERN.exec(file.fieldname);
 
@@ -288,16 +285,7 @@ export class PeopleController {
         );
       }
 
-      const index = Number(match[1]);
-      const fieldName = match[2] as keyof PersonCreateFiles;
-
-      if (index >= peopleCount) {
-        throw new BadRequestException(
-          `File field index is out of range: ${file.fieldname}`,
-        );
-      }
-
-      const personFiles = filesByIndex.get(index) ?? {};
+      const fieldName = match[1] as keyof PersonCreateFiles;
 
       if (personFiles[fieldName]) {
         throw new BadRequestException(
@@ -306,9 +294,8 @@ export class PeopleController {
       }
 
       personFiles[fieldName] = file;
-      filesByIndex.set(index, personFiles);
     }
 
-    return filesByIndex;
+    return personFiles;
   }
 }

@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import {
   MediaFileType,
   MediaFileUsage,
@@ -24,6 +25,8 @@ interface TestTransactionClient {
   relationship: CategoryDelegateMock;
   person: {
     create: jest.Mock;
+    createManyAndReturn: jest.Mock;
+    findFirst: jest.Mock;
     findMany: jest.Mock;
   };
   mediaFile: {
@@ -94,6 +97,8 @@ describe('PeopleService', () => {
       },
       person: {
         create: jest.fn(),
+        createManyAndReturn: jest.fn(),
+        findFirst: jest.fn(),
         findMany: jest.fn(),
       },
       mediaFile: {
@@ -198,7 +203,7 @@ describe('PeopleService', () => {
       {
         id: 'person-2',
         name: '김영희',
-        phoneNumber: null,
+        phoneNumber: '010-9999-0000',
         isImportant: false,
         profileImageFile: null,
       },
@@ -215,7 +220,7 @@ describe('PeopleService', () => {
       {
         id: 'person-2',
         name: '김영희',
-        phoneNumber: null,
+        phoneNumber: '010-9999-0000',
         image: null,
         isImportant: false,
       },
@@ -239,7 +244,81 @@ describe('PeopleService', () => {
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
   });
 
-  it('creates people in one transaction and stores missing category names', async () => {
+  it('imports contact people with only name and phone number', async () => {
+    prisma.person.createManyAndReturn.mockResolvedValue([
+      {
+        id: 'person-1',
+        name: '홍길동',
+        phoneNumber: '010-1234-5678',
+        isImportant: false,
+      },
+      {
+        id: 'person-2',
+        name: '김영희',
+        phoneNumber: '010-1234-5678',
+        isImportant: false,
+      },
+    ]);
+
+    await expect(
+      service.importPeople('user-1', [
+        {
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+        },
+        {
+          name: '김영희',
+          phoneNumber: '010-1234-5678',
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        id: 'person-1',
+        name: '홍길동',
+        phoneNumber: '010-1234-5678',
+        image: null,
+        isImportant: false,
+      },
+      {
+        id: 'person-2',
+        name: '김영희',
+        phoneNumber: '010-1234-5678',
+        image: null,
+        isImportant: false,
+      },
+    ]);
+
+    expect(prisma.person.createManyAndReturn).toHaveBeenCalledWith({
+      data: [
+        {
+          userId: 'user-1',
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+        },
+        {
+          userId: 'user-1',
+          name: '김영희',
+          phoneNumber: '010-1234-5678',
+        },
+      ],
+      select: {
+        id: true,
+        name: true,
+        phoneNumber: true,
+        isImportant: true,
+      },
+    });
+    expect(s3Service.uploadFile).not.toHaveBeenCalled();
+    expect(prisma.mediaFile.create).not.toHaveBeenCalled();
+    expect(prisma.businessCard.create).not.toHaveBeenCalled();
+    expect(prisma.extraContact.create).not.toHaveBeenCalled();
+    expect(prisma.job.createMany).not.toHaveBeenCalled();
+    expect(prisma.company.createMany).not.toHaveBeenCalled();
+    expect(prisma.position.createMany).not.toHaveBeenCalled();
+    expect(prisma.relationship.createMany).not.toHaveBeenCalled();
+  });
+
+  it('creates one person in one transaction and stores missing category names', async () => {
     const firstPerson = {
       id: 'person-1',
       userId: 'user-1',
@@ -258,51 +337,27 @@ describe('PeopleService', () => {
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
-    const secondPerson = {
-      ...firstPerson,
-      id: 'person-2',
-      name: '김영희',
-      birthDate: null,
-      isImportant: false,
-      phoneNumber: null,
-      job: null,
-      company: '카카오',
-      position: null,
-      relationship: null,
-      personality: null,
-      birthdayNotificationEnabled: false,
-      scheduleNotificationEnabled: true,
-    };
-    prisma.person.create
-      .mockResolvedValueOnce(firstPerson)
-      .mockResolvedValueOnce(secondPerson);
+    prisma.person.create.mockResolvedValueOnce(firstPerson);
 
     await expect(
-      service.createPeople(
+      service.createPerson(
         'user-1',
-        [
-          {
-            name: '홍길동',
-            birthDate: '1990-01-01',
-            isImportant: true,
-            phoneNumber: '010-1234-5678',
-            job: '개발/IT',
-            company: '토스',
-            position: '과장',
-            relationship: '동료',
-            personality: '꼼꼼함',
-            birthdayNotificationEnabled: true,
-            scheduleNotificationEnabled: false,
-          },
-          {
-            name: '김영희',
-            company: '카카오',
-            scheduleNotificationEnabled: true,
-          },
-        ],
-        new Map(),
+        {
+          name: '홍길동',
+          birthDate: '1990-01-01',
+          isImportant: true,
+          phoneNumber: '010-1234-5678',
+          job: '개발/IT',
+          company: '토스',
+          position: '과장',
+          relationship: '동료',
+          personality: '꼼꼼함',
+          birthdayNotificationEnabled: true,
+          scheduleNotificationEnabled: false,
+        },
+        {},
       ),
-    ).resolves.toEqual([
+    ).resolves.toEqual(
       {
         ...firstPerson,
         birthDate: '1990-01-01',
@@ -310,23 +365,14 @@ describe('PeopleService', () => {
         extraContacts: [],
         businessCards: [],
       },
-      {
-        ...secondPerson,
-        image: null,
-        extraContacts: [],
-        businessCards: [],
-      },
-    ]);
+    );
 
     expect(prisma.job.createMany).toHaveBeenCalledWith({
       data: [{ userId: 'user-1', name: '개발/IT' }],
       skipDuplicates: true,
     });
     expect(prisma.company.createMany).toHaveBeenCalledWith({
-      data: [
-        { userId: 'user-1', name: '토스' },
-        { userId: 'user-1', name: '카카오' },
-      ],
+      data: [{ userId: 'user-1', name: '토스' }],
       skipDuplicates: true,
     });
     expect(prisma.position.createMany).toHaveBeenCalledWith({
@@ -337,7 +383,7 @@ describe('PeopleService', () => {
       data: [{ userId: 'user-1', name: '동료' }],
       skipDuplicates: true,
     });
-    expect(prisma.person.create).toHaveBeenNthCalledWith(1, {
+    expect(prisma.person.create).toHaveBeenCalledWith({
       data: {
         userId: 'user-1',
         name: '홍길동',
@@ -352,23 +398,6 @@ describe('PeopleService', () => {
         personality: '꼼꼼함',
         birthdayNotificationEnabled: true,
         scheduleNotificationEnabled: false,
-      },
-    });
-    expect(prisma.person.create).toHaveBeenNthCalledWith(2, {
-      data: {
-        userId: 'user-1',
-        name: '김영희',
-        profileImageFileId: undefined,
-        birthDate: undefined,
-        isImportant: false,
-        phoneNumber: undefined,
-        job: undefined,
-        company: '카카오',
-        position: undefined,
-        relationship: undefined,
-        personality: undefined,
-        birthdayNotificationEnabled: false,
-        scheduleNotificationEnabled: true,
       },
     });
   });
@@ -421,7 +450,7 @@ describe('PeopleService', () => {
       profileImageFileId: 'profile-media-id',
       birthDate: null,
       isImportant: false,
-      phoneNumber: null,
+      phoneNumber: '010-1234-5678',
       job: null,
       company: null,
       position: null,
@@ -480,21 +509,16 @@ describe('PeopleService', () => {
     prisma.businessCard.create.mockResolvedValue(businessCard);
 
     await expect(
-      service.createPeople(
+      service.createPerson(
         'user-1',
-        [{ name: '홍길동' }],
-        new Map([
-          [
-            0,
-            {
-              image: profileFile,
-              businessCardFrontImage: frontFile,
-              businessCardBackImage: backFile,
-            },
-          ],
-        ]),
+        { name: '홍길동', phoneNumber: '010-1234-5678' },
+        {
+          image: profileFile,
+          businessCardFrontImage: frontFile,
+          businessCardBackImage: backFile,
+        },
       ),
-    ).resolves.toEqual([
+    ).resolves.toEqual(
       {
         ...person,
         image: 'https://signed.example.com/profiles/profile.png',
@@ -527,7 +551,7 @@ describe('PeopleService', () => {
           },
         ],
       },
-    ]);
+    );
 
     expect(s3Service.uploadFile).toHaveBeenNthCalledWith(1, {
       body: profileFile.buffer,
@@ -554,7 +578,7 @@ describe('PeopleService', () => {
         profileImageFileId: 'profile-media-id',
         birthDate: undefined,
         isImportant: false,
-        phoneNumber: undefined,
+        phoneNumber: '010-1234-5678',
         job: undefined,
         company: undefined,
         position: undefined,
@@ -610,7 +634,7 @@ describe('PeopleService', () => {
       profileImageFileId: null,
       birthDate: null,
       isImportant: false,
-      phoneNumber: null,
+      phoneNumber: '010-1234-5678',
       job: null,
       company: null,
       position: null,
@@ -637,33 +661,32 @@ describe('PeopleService', () => {
       .mockResolvedValueOnce(instagramContact);
 
     await expect(
-      service.createPeople(
+      service.createPerson(
         'user-1',
-        [
-          {
-            name: '홍길동',
-            extraContacts: [
-              {
-                type: 'email',
-                content: 'user@example.com',
-              },
-              {
-                type: 'instagram',
-                content: '@hong',
-              },
-            ],
-          },
-        ],
-        new Map(),
+        {
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+          extraContacts: [
+            {
+              type: 'email',
+              content: 'user@example.com',
+            },
+            {
+              type: 'instagram',
+              content: '@hong',
+            },
+          ],
+        },
+        {},
       ),
-    ).resolves.toEqual([
+    ).resolves.toEqual(
       {
         ...person,
         image: null,
         extraContacts: [emailContact, instagramContact],
         businessCards: [],
       },
-    ]);
+    );
 
     expect(prisma.extraContact.create).toHaveBeenNthCalledWith(1, {
       data: {
@@ -693,6 +716,56 @@ describe('PeopleService', () => {
     });
   });
 
+  it('rejects duplicate phone numbers for single person creation before uploading files', async () => {
+    prisma.person.findFirst.mockResolvedValue({ id: 'person-existing' });
+
+    await expect(
+      service.createPerson(
+        'user-1',
+        {
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+        },
+        {
+          image: {
+            buffer: Buffer.from('profile'),
+            mimetype: 'image/png',
+            originalname: 'profile.png',
+            size: 7,
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PERSON_PHONE_NUMBER_ALREADY_EXISTS',
+        message: '이미 등록된 전화번호입니다.',
+        phoneNumber: '010-1234-5678',
+      },
+    });
+
+    await expect(
+      service.createPerson(
+        'user-1',
+        {
+          name: '홍길동',
+          phoneNumber: '010-1234-5678',
+        },
+        {},
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.person.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        phoneNumber: '010-1234-5678',
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(s3Service.uploadFile).not.toHaveBeenCalled();
+    expect(prisma.person.create).not.toHaveBeenCalled();
+  });
+
   it('deletes uploaded S3 files when database creation fails', async () => {
     s3Service.uploadFile.mockResolvedValueOnce({
       bucket: 'bucket',
@@ -704,22 +777,17 @@ describe('PeopleService', () => {
     prisma.person.create.mockRejectedValue(new Error('database failed'));
 
     await expect(
-      service.createPeople(
+      service.createPerson(
         'user-1',
-        [{ name: '홍길동' }],
-        new Map([
-          [
-            0,
-            {
-              image: {
-                buffer: Buffer.from('profile'),
-                mimetype: 'image/png',
-                originalname: 'profile.png',
-                size: 7,
-              },
-            },
-          ],
-        ]),
+        { name: '홍길동', phoneNumber: '010-1234-5678' },
+        {
+          image: {
+            buffer: Buffer.from('profile'),
+            mimetype: 'image/png',
+            originalname: 'profile.png',
+            size: 7,
+          },
+        },
       ),
     ).rejects.toThrow('database failed');
 
