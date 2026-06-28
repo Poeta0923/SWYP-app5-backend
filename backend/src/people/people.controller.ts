@@ -31,7 +31,11 @@ import { CreatePersonMultipartDto } from './dto/create-person-multipart.dto';
 import { CreatePersonItemDto } from './dto/create-person-item.dto';
 import { ImportPeopleDto } from './dto/import-people.dto';
 import { PersonCategoryNamesEntity } from './entities/person-category-names.entity';
-import { PersonEntity, PersonListItemEntity } from './entities/person.entity';
+import {
+  ImportedPersonListItemEntity,
+  PersonEntity,
+  PersonListItemEntity,
+} from './entities/person.entity';
 import {
   type PersonCreateFiles,
   type PersonImageFile,
@@ -62,7 +66,7 @@ export class PeopleController {
   @ApiBody({ type: ImportPeopleDto })
   @ApiCreatedResponse({
     description: '연락처 인물 일괄 저장 성공',
-    type: PersonListItemEntity,
+    type: ImportedPersonListItemEntity,
     isArray: true,
   })
   @ApiBadRequestResponse({
@@ -140,7 +144,11 @@ export class PeopleController {
     const person = this.parsePerson(personJson);
     const personFiles = this.mapFilesToPerson(files);
 
-    return this.peopleService.createPerson(currentUser.sub, person, personFiles);
+    return this.peopleService.createPerson(
+      currentUser.sub,
+      person,
+      personFiles,
+    );
   }
 
   @Get()

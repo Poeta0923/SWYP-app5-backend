@@ -30,6 +30,15 @@ export interface PersonListItemResponse {
   phoneNumber: string;
   image: string | null;
   isImportant: boolean;
+  updatedAt: string;
+}
+
+export interface ImportedPersonListItemResponse {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  image: string | null;
+  isImportant: boolean;
 }
 
 export interface PersonImageFile {
@@ -220,7 +229,7 @@ export class PeopleService {
   async importPeople(
     userId: string,
     items: ImportPersonItemDto[],
-  ): Promise<PersonListItemResponse[]> {
+  ): Promise<ImportedPersonListItemResponse[]> {
     const people = await this.prisma.person.createManyAndReturn({
       data: items.map((item) => ({
         userId,
@@ -283,6 +292,7 @@ export class PeopleService {
         name: true,
         phoneNumber: true,
         isImportant: true,
+        updatedAt: true,
         profileImageFile: {
           select: {
             s3Key: true,
@@ -295,6 +305,7 @@ export class PeopleService {
     return people.map(({ profileImageFile, ...person }) => ({
       ...person,
       image: this.toSignedImageUrl(profileImageFile),
+      updatedAt: person.updatedAt.toISOString(),
     }));
   }
 

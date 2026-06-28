@@ -5,6 +5,7 @@ import {
 } from '../../../generated/prisma/client';
 import type {
   CreatedPersonResponse,
+  ImportedPersonListItemResponse,
   PersonListItemResponse,
 } from '../people.service';
 
@@ -110,6 +111,40 @@ export class PersonExtraContactEntity {
   content: string;
 }
 
+export class ImportedPersonListItemEntity implements ImportedPersonListItemResponse {
+  @ApiProperty({
+    example: 'clx0000000000000000000003',
+    description: '인물 ID',
+  })
+  id: string;
+
+  @ApiProperty({
+    example: '홍길동',
+    description: '이름',
+  })
+  name: string;
+
+  @ApiProperty({
+    example: '010-1234-5678',
+    description: '전화번호',
+  })
+  phoneNumber: string;
+
+  @ApiPropertyOptional({
+    example:
+      'https://cdn.example.com/people/user-1/profiles/profile.png?Expires=...',
+    description: '프로필 이미지 CloudFront signed URL',
+    nullable: true,
+  })
+  image: string | null;
+
+  @ApiProperty({
+    example: false,
+    description: '중요 인물 여부',
+  })
+  isImportant: boolean;
+}
+
 export class PersonListItemEntity implements PersonListItemResponse {
   @ApiProperty({
     example: 'clx0000000000000000000003',
@@ -142,6 +177,12 @@ export class PersonListItemEntity implements PersonListItemResponse {
     description: '중요 인물 여부',
   })
   isImportant: boolean;
+
+  @ApiProperty({
+    example: '2026-06-28T08:00:00.000Z',
+    description: '인물 정보 수정 시각',
+  })
+  updatedAt: string;
 }
 
 export class PersonEntity implements CreatedPersonResponse {
