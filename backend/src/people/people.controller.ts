@@ -27,6 +27,7 @@ import { RequiredAgreementsGuard } from '../agreements/required-agreements.guard
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
+import { CreatePersonMultipartDto } from './dto/create-person-multipart.dto';
 import { CreatePersonItemDto } from './dto/create-person-item.dto';
 import { ImportPeopleDto } from './dto/import-people.dto';
 import { PersonCategoryNamesEntity } from './entities/person-category-names.entity';
@@ -41,12 +42,6 @@ const PERSON_IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 // 단일 인물 등록 multipart 파일 필드명이다.
 const PERSON_FILE_FIELD_PATTERN =
   /^(image|businessCardFrontImage|businessCardBackImage)$/;
-const CREATE_PERSON_MULTIPART_DESCRIPTION = [
-  '`person`에는 Person 생성 정보 JSON 객체 문자열을 넣습니다.',
-  '파일은 `image`, `businessCardFrontImage`, `businessCardBackImage` 필드로 전송합니다.',
-  '`/people/import`는 기기 연락처 초기 가져오기용이고, 이 API는 단일 인물 상세 등록용입니다.',
-].join('\n');
-
 interface UploadedPersonMultipartFile extends PersonImageFile {
   fieldname: string;
 }
@@ -119,59 +114,11 @@ export class PeopleController {
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: '단일 인물 등록',
-    description: CREATE_PERSON_MULTIPART_DESCRIPTION,
+    description:
+      '단일 인물을 등록합니다. 연락처 기반 인물 등록과 다르게 name, phoneNumber 외의 다른 정보들을 입력할 수 있습니다.',
   })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['person'],
-      properties: {
-        person: {
-          type: 'string',
-          description: 'Person 생성 정보 JSON 객체 문자열',
-          example: JSON.stringify({
-            name: '홍길동',
-            birthDate: '1990-01-01',
-            isImportant: true,
-            phoneNumber: '010-1234-5678',
-            job: '개발/IT',
-            company: '토스',
-            position: '과장',
-            relationship: '동료',
-            personality: '차분하고 꼼꼼함',
-            birthdayNotificationEnabled: true,
-            scheduleNotificationEnabled: false,
-            extraContacts: [
-              {
-                type: 'email',
-                content: 'user@example.com',
-              },
-              {
-                type: 'instagram',
-                content: '@hong',
-              },
-            ],
-          }),
-        },
-        image: {
-          type: 'string',
-          format: 'binary',
-          description: '프로필 이미지',
-        },
-        businessCardFrontImage: {
-          type: 'string',
-          format: 'binary',
-          description: '명함 앞면 이미지',
-        },
-        businessCardBackImage: {
-          type: 'string',
-          format: 'binary',
-          description: '명함 뒷면 이미지',
-        },
-      },
-    },
-  })
+  @ApiBody({ type: CreatePersonMultipartDto })
   @ApiCreatedResponse({
     description: '인물 등록 성공',
     type: PersonEntity,
