@@ -29,9 +29,11 @@ interface TestTransactionClient {
     findFirst: jest.Mock;
     findMany: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
   mediaFile: {
     create: jest.Mock;
+    delete: jest.Mock;
   };
   businessCard: {
     create: jest.Mock;
@@ -103,9 +105,11 @@ describe('PeopleService', () => {
         findFirst: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       mediaFile: {
         create: jest.fn(),
+        delete: jest.fn(),
       },
       businessCard: {
         create: jest.fn(),
@@ -635,6 +639,291 @@ describe('PeopleService', () => {
         name: '홍길동',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('adds a profile image only when the person does not already have one', async () => {
+    const image = {
+      buffer: Buffer.from('profile'),
+      mimetype: 'image/png',
+      originalname: 'profile.png',
+      size: 7,
+    };
+    const updatedPerson = {
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: null,
+      isImportant: false,
+      phoneNumber: '010-1234-5678',
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      birthdayNotificationOffsetDays: null,
+      profileImageFile: {
+        s3Key: 'profiles/new.png',
+      },
+      extraContacts: [],
+      businessCards: [],
+    };
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        profileImageFile: null,
+      })
+      .mockResolvedValueOnce(updatedPerson);
+    s3Service.uploadFile.mockResolvedValueOnce({
+      bucket: 'bucket',
+      key: 'profiles/new.png',
+      url: 'https://cdn.example.com/new.png',
+      contentType: 'image/png',
+      size: 7,
+    });
+    prisma.mediaFile.create.mockResolvedValueOnce({
+      id: 'profile-media-id',
+    });
+    prisma.person.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    const { profileImageFile: _profileImageFile, ...expectedPerson } =
+      updatedPerson;
+
+    await expect(
+      service.addPersonProfileImage('user-1', 'person-1', image),
+    ).resolves.toEqual({
+      ...expectedPerson,
+      birthDate: null,
+      image: 'https://signed.example.com/profiles/new.png',
+      businessCards: [],
+    });
+
+    expect(s3Service.uploadFile).toHaveBeenCalledWith({
+      body: image.buffer,
+      contentType: 'image/png',
+      originalName: 'profile.png',
+      prefix: 'people/user-1/profiles',
+    });
+    expect(prisma.mediaFile.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        type: MediaFileType.IMAGE,
+        usage: MediaFileUsage.PERSON_PROFILE,
+        bucket: 'bucket',
+        s3Key: 'profiles/new.png',
+        contentType: 'image/png',
+        sizeBytes: 7,
+        originalName: 'profile.png',
+      },
+    });
+    expect(prisma.person.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'person-1',
+        userId: 'user-1',
+        profileImageFileId: null,
+      },
+      data: {
+        profileImageFileId: 'profile-media-id',
+      },
+    });
+    expect(s3Service.deleteFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects adding a profile image when one already exists before uploading', async () => {
+    prisma.person.findFirst.mockResolvedValueOnce({
+      id: 'person-1',
+      profileImageFile: {
+        id: 'old-media-id',
+        s3Key: 'profiles/old.png',
+      },
+    });
+
+    await expect(
+      service.addPersonProfileImage('user-1', 'person-1', {
+        buffer: Buffer.from('profile'),
+        mimetype: 'image/png',
+        originalname: 'profile.png',
+        size: 7,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PERSON_PROFILE_IMAGE_ALREADY_EXISTS',
+        message: '이미 프로필 이미지가 등록되어 있습니다.',
+        personId: 'person-1',
+      },
+    });
+
+    expect(s3Service.uploadFile).not.toHaveBeenCalled();
+    expect(prisma.mediaFile.create).not.toHaveBeenCalled();
+  });
+
+  it('replaces an existing profile image and deletes the old object after database update', async () => {
+    const image = {
+      buffer: Buffer.from('new-profile'),
+      mimetype: 'image/jpeg',
+      originalname: 'new-profile.jpg',
+      size: 11,
+    };
+    const updatedPerson = {
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: null,
+      isImportant: false,
+      phoneNumber: '010-1234-5678',
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      birthdayNotificationOffsetDays: null,
+      profileImageFile: {
+        s3Key: 'profiles/new.jpg',
+      },
+      extraContacts: [],
+      businessCards: [],
+    };
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        profileImageFile: {
+          id: 'old-media-id',
+          s3Key: 'profiles/old.png',
+        },
+      })
+      .mockResolvedValueOnce(updatedPerson);
+    s3Service.uploadFile.mockResolvedValueOnce({
+      bucket: 'bucket',
+      key: 'profiles/new.jpg',
+      url: 'https://cdn.example.com/new.jpg',
+      contentType: 'image/jpeg',
+      size: 11,
+    });
+    prisma.mediaFile.create.mockResolvedValueOnce({
+      id: 'new-media-id',
+    });
+
+    const { profileImageFile: _profileImageFile, ...expectedPerson } =
+      updatedPerson;
+
+    await expect(
+      service.updatePersonProfileImage('user-1', 'person-1', image),
+    ).resolves.toEqual({
+      ...expectedPerson,
+      birthDate: null,
+      image: 'https://signed.example.com/profiles/new.jpg',
+      businessCards: [],
+    });
+
+    expect(prisma.person.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'person-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        profileImageFile: {
+          connect: {
+            id: 'new-media-id',
+          },
+        },
+      },
+    });
+    expect(prisma.mediaFile.delete).toHaveBeenCalledWith({
+      where: {
+        id: 'old-media-id',
+      },
+    });
+    expect(s3Service.deleteFile).toHaveBeenCalledWith('profiles/old.png');
+  });
+
+  it('deletes an existing profile image from person, media file, and S3', async () => {
+    const updatedPerson = {
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: null,
+      isImportant: false,
+      phoneNumber: '010-1234-5678',
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      birthdayNotificationOffsetDays: null,
+      profileImageFile: null,
+      extraContacts: [],
+      businessCards: [],
+    };
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        profileImageFile: {
+          id: 'old-media-id',
+          s3Key: 'profiles/old.png',
+        },
+      })
+      .mockResolvedValueOnce(updatedPerson);
+
+    const { profileImageFile: _profileImageFile, ...expectedPerson } =
+      updatedPerson;
+
+    await expect(
+      service.deletePersonProfileImage('user-1', 'person-1'),
+    ).resolves.toEqual({
+      ...expectedPerson,
+      birthDate: null,
+      image: null,
+      businessCards: [],
+    });
+
+    expect(prisma.person.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'person-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        profileImageFile: {
+          disconnect: true,
+        },
+      },
+    });
+    expect(prisma.mediaFile.delete).toHaveBeenCalledWith({
+      where: {
+        id: 'old-media-id',
+      },
+    });
+    expect(s3Service.deleteFile).toHaveBeenCalledWith('profiles/old.png');
+  });
+
+  it('throws not found when updating or deleting a missing profile image', async () => {
+    prisma.person.findFirst.mockResolvedValue({
+      id: 'person-1',
+      profileImageFile: null,
+    });
+
+    await expect(
+      service.updatePersonProfileImage('user-1', 'person-1', {
+        buffer: Buffer.from('profile'),
+        mimetype: 'image/png',
+        originalname: 'profile.png',
+        size: 7,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PERSON_PROFILE_IMAGE_NOT_FOUND',
+        message: '프로필 이미지를 찾을 수 없습니다.',
+        personId: 'person-1',
+      },
+    });
+    await expect(
+      service.deletePersonProfileImage('user-1', 'person-1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(s3Service.uploadFile).not.toHaveBeenCalled();
+    expect(prisma.person.update).not.toHaveBeenCalled();
   });
 
   it('imports contact people with only name and phone number', async () => {
