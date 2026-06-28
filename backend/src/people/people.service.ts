@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -15,6 +16,7 @@ import type {
   CreatePersonItemDto,
 } from './dto/create-person-item.dto';
 import type { ImportPersonItemDto } from './dto/import-people.dto';
+import type { UpdatePersonItemDto } from './dto/update-person-item.dto';
 import {
   DEFAULT_JOB_NAMES,
   DEFAULT_POSITION_NAMES,
@@ -120,6 +122,13 @@ interface UploadedPersonFiles {
   businessCardBackImage?: UploadedPersonStorageFile;
 }
 
+interface PersonCategoryNameSource {
+  job?: string | null;
+  company?: string | null;
+  position?: string | null;
+  relationship?: string | null;
+}
+
 type BusinessCardWithMediaFiles = {
   id: string;
   frontImageFile: MediaFileResponseSource | null;
@@ -157,6 +166,13 @@ type PersonDetailQueryResult = {
     content: string;
   }[];
   businessCards: BusinessCardWithMediaFiles[];
+};
+
+type ExistingPersonForUpdate = {
+  id: string;
+  phoneNumber: string;
+  birthdayNotificationEnabled: boolean;
+  birthdayNotificationOffsetDays: number | null;
 };
 
 @Injectable()
@@ -416,6 +432,77 @@ export class PeopleService {
     return this.toPersonDetailResponse(person);
   }
 
+  async updatePerson(
+    userId: string,
+    personId: string,
+    item: UpdatePersonItemDto,
+  ): Promise<PersonDetailResponse> {
+    const existingPerson = await this.findExistingPersonForUpdate(
+      userId,
+      personId,
+    );
+
+    if (
+      item.phoneNumber !== undefined &&
+      item.phoneNumber !== existingPerson.phoneNumber
+    ) {
+      await this.assertPhoneNumberIsAvailable(
+        userId,
+        item.phoneNumber,
+        personId,
+      );
+    }
+
+    this.assertBirthdayNotificationUpdateIsValid(existingPerson, item);
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.createMissingCategoryNames(tx, userId, [item]);
+
+      await tx.person.update({
+        where: {
+          id_userId: {
+            id: personId,
+            userId,
+          },
+        },
+        data: this.toPersonUpdateData(item),
+      });
+
+      if (this.hasOwn(item, 'extraContacts')) {
+        await tx.extraContact.deleteMany({
+          where: {
+            userId,
+            personId,
+          },
+        });
+        await this.createExtraContacts(
+          tx,
+          userId,
+          personId,
+          item.extraContacts,
+        );
+      }
+
+      const updatedPerson = await tx.person.findFirst({
+        where: {
+          id: personId,
+          userId,
+        },
+        select: this.personDetailSelect(),
+      });
+
+      if (!updatedPerson) {
+        throw new NotFoundException({
+          code: 'PERSON_NOT_FOUND',
+          message: '인물을 찾을 수 없습니다.',
+          personId,
+        });
+      }
+
+      return this.toPersonDetailResponse(updatedPerson);
+    });
+  }
+
   private async ensureDefaultCategories(userId: string): Promise<void> {
     await this.prisma.$transaction([
       this.prisma.job.createMany({
@@ -436,11 +523,13 @@ export class PeopleService {
   private async assertPhoneNumberIsAvailable(
     userId: string,
     phoneNumber: string,
+    excludePersonId?: string,
   ): Promise<void> {
     const existingPerson = await this.prisma.person.findFirst({
       where: {
         userId,
         phoneNumber,
+        ...(excludePersonId ? { id: { not: excludePersonId } } : {}),
       },
       select: {
         id: true,
@@ -456,6 +545,107 @@ export class PeopleService {
       message: '이미 등록된 전화번호입니다.',
       phoneNumber,
     });
+  }
+
+  private async findExistingPersonForUpdate(
+    userId: string,
+    personId: string,
+  ): Promise<ExistingPersonForUpdate> {
+    const existingPerson = await this.prisma.person.findFirst({
+      where: {
+        id: personId,
+        userId,
+      },
+      select: {
+        id: true,
+        phoneNumber: true,
+        birthdayNotificationEnabled: true,
+        birthdayNotificationOffsetDays: true,
+      },
+    });
+
+    if (!existingPerson) {
+      throw new NotFoundException({
+        code: 'PERSON_NOT_FOUND',
+        message: '인물을 찾을 수 없습니다.',
+        personId,
+      });
+    }
+
+    return existingPerson;
+  }
+
+  private assertBirthdayNotificationUpdateIsValid(
+    existingPerson: ExistingPersonForUpdate,
+    item: UpdatePersonItemDto,
+  ): void {
+    const birthdayNotificationEnabled = this.hasOwn(
+      item,
+      'birthdayNotificationEnabled',
+    )
+      ? item.birthdayNotificationEnabled
+      : existingPerson.birthdayNotificationEnabled;
+    const birthdayNotificationOffsetDays = this.hasOwn(
+      item,
+      'birthdayNotificationOffsetDays',
+    )
+      ? item.birthdayNotificationOffsetDays
+      : existingPerson.birthdayNotificationOffsetDays;
+
+    if (
+      birthdayNotificationEnabled === true &&
+      birthdayNotificationOffsetDays == null
+    ) {
+      throw new BadRequestException({
+        code: 'BIRTHDAY_NOTIFICATION_OFFSET_REQUIRED',
+        message: '생일 알림을 켜려면 알림 기준일이 필요합니다.',
+      });
+    }
+  }
+
+  private toPersonUpdateData(
+    item: UpdatePersonItemDto,
+  ): Prisma.PersonUpdateInput {
+    const data: Prisma.PersonUpdateInput = {};
+
+    if (this.hasOwn(item, 'name')) {
+      data.name = item.name;
+    }
+    if (this.hasOwn(item, 'birthDate')) {
+      data.birthDate = this.toNullableDate(item.birthDate);
+    }
+    if (this.hasOwn(item, 'isImportant')) {
+      data.isImportant = item.isImportant;
+    }
+    if (this.hasOwn(item, 'phoneNumber')) {
+      data.phoneNumber = item.phoneNumber;
+    }
+    if (this.hasOwn(item, 'job')) {
+      data.job = item.job;
+    }
+    if (this.hasOwn(item, 'company')) {
+      data.company = item.company;
+    }
+    if (this.hasOwn(item, 'position')) {
+      data.position = item.position;
+    }
+    if (this.hasOwn(item, 'relationship')) {
+      data.relationship = item.relationship;
+    }
+    if (this.hasOwn(item, 'personality')) {
+      data.personality = item.personality;
+    }
+    if (this.hasOwn(item, 'birthdayNotificationEnabled')) {
+      data.birthdayNotificationEnabled = item.birthdayNotificationEnabled;
+    }
+    if (this.hasOwn(item, 'birthdayNotificationOffsetDays')) {
+      data.birthdayNotificationOffsetDays = item.birthdayNotificationOffsetDays;
+    }
+    if (item.birthdayNotificationEnabled === false) {
+      data.birthdayNotificationOffsetDays = null;
+    }
+
+    return data;
   }
 
   private async uploadPersonFiles(
@@ -514,7 +704,7 @@ export class PeopleService {
   private async createMissingCategoryNames(
     tx: Prisma.TransactionClient,
     userId: string,
-    items: CreatePersonItemDto[],
+    items: PersonCategoryNameSource[],
   ): Promise<void> {
     const jobs = this.toCategoryCreateManyData(
       userId,
@@ -627,7 +817,7 @@ export class PeopleService {
 
   private toCategoryCreateManyData(
     userId: string,
-    names: (string | undefined)[],
+    names: (string | null | undefined)[],
   ) {
     // 같은 요청 안에서 동일 카테고리명이 여러 번 들어와도 DB에는 한 번만 요청한다.
     const uniqueNames = [
@@ -705,6 +895,81 @@ export class PeopleService {
 
   private toDate(date?: string): Date | undefined {
     return date ? new Date(date) : undefined;
+  }
+
+  private toNullableDate(date?: string | null): Date | null | undefined {
+    if (date === null) {
+      return null;
+    }
+
+    return this.toDate(date);
+  }
+
+  private hasOwn<T extends object, K extends PropertyKey>(
+    object: T,
+    key: K,
+  ): object is T & Record<K, unknown> {
+    return Object.prototype.hasOwnProperty.call(object, key);
+  }
+
+  private personDetailSelect() {
+    return {
+      id: true,
+      name: true,
+      birthDate: true,
+      isImportant: true,
+      phoneNumber: true,
+      job: true,
+      company: true,
+      position: true,
+      relationship: true,
+      personality: true,
+      birthdayNotificationEnabled: true,
+      birthdayNotificationOffsetDays: true,
+      profileImageFile: {
+        select: {
+          s3Key: true,
+        },
+      },
+      extraContacts: {
+        select: {
+          id: true,
+          type: true,
+          content: true,
+        },
+        orderBy: { createdAt: Prisma.SortOrder.asc },
+      },
+      businessCards: {
+        select: {
+          id: true,
+          frontImageFile: {
+            select: {
+              id: true,
+              type: true,
+              usage: true,
+              bucket: true,
+              s3Key: true,
+              contentType: true,
+              sizeBytes: true,
+              originalName: true,
+            },
+          },
+          backImageFile: {
+            select: {
+              id: true,
+              type: true,
+              usage: true,
+              bucket: true,
+              s3Key: true,
+              contentType: true,
+              sizeBytes: true,
+              originalName: true,
+            },
+          },
+        },
+        orderBy: { createdAt: Prisma.SortOrder.asc },
+      },
+    };
   }
 
   private async deleteUploadedFiles(keys: string[]): Promise<void> {

@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   UploadedFiles,
   UseGuards,
@@ -32,6 +33,7 @@ import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { CreatePersonMultipartDto } from './dto/create-person-multipart.dto';
 import { CreatePersonItemDto } from './dto/create-person-item.dto';
 import { ImportPeopleDto } from './dto/import-people.dto';
+import { UpdatePersonItemDto } from './dto/update-person-item.dto';
 import { PersonCategoryNamesEntity } from './entities/person-category-names.entity';
 import {
   ImportedPersonListItemEntity,
@@ -213,6 +215,39 @@ export class PeopleController {
     @Param('personId') personId: string,
   ) {
     return this.peopleService.getPerson(currentUser.sub, personId);
+  }
+
+  @Patch(':personId/update')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '인물 정보 수정',
+    description:
+      '프로필 이미지와 명함 이미지를 제외한 인물 기본 정보와 추가 연락처를 수정합니다. extraContacts를 생략하면 유지하고, 빈 배열로 보내면 모두 삭제합니다.',
+  })
+  @ApiBody({ type: UpdatePersonItemDto })
+  @ApiOkResponse({
+    description: '인물 정보 수정 성공',
+    type: PersonEntity,
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '인물을 찾을 수 없음',
+  })
+  updatePerson(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('personId') personId: string,
+    @Body() dto: UpdatePersonItemDto,
+  ) {
+    return this.peopleService.updatePerson(currentUser.sub, personId, dto);
   }
 
   private parsePerson(personJson: string | undefined): CreatePersonItemDto {
