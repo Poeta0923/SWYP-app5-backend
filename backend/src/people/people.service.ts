@@ -58,7 +58,7 @@ export interface CreatedPersonResponse {
   relationship: string | null;
   personality: string | null;
   birthdayNotificationEnabled: boolean;
-  scheduleNotificationEnabled: boolean;
+  birthdayNotificationOffsetDays: number | null;
   extraContacts: {
     id: string;
     type: string;
@@ -176,8 +176,10 @@ export class PeopleService {
             personality: item.personality,
             birthdayNotificationEnabled:
               item.birthdayNotificationEnabled ?? false,
-            scheduleNotificationEnabled:
-              item.scheduleNotificationEnabled ?? false,
+            birthdayNotificationOffsetDays:
+              item.birthdayNotificationEnabled === true
+                ? item.birthdayNotificationOffsetDays
+                : null,
           },
         });
         const extraContacts = await this.createExtraContacts(

@@ -333,7 +333,7 @@ describe('PeopleService', () => {
       relationship: '동료',
       personality: '꼼꼼함',
       birthdayNotificationEnabled: true,
-      scheduleNotificationEnabled: false,
+      birthdayNotificationOffsetDays: 1,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
@@ -353,19 +353,17 @@ describe('PeopleService', () => {
           relationship: '동료',
           personality: '꼼꼼함',
           birthdayNotificationEnabled: true,
-          scheduleNotificationEnabled: false,
+          birthdayNotificationOffsetDays: 1,
         },
         {},
       ),
-    ).resolves.toEqual(
-      {
-        ...firstPerson,
-        birthDate: '1990-01-01',
-        image: null,
-        extraContacts: [],
-        businessCards: [],
-      },
-    );
+    ).resolves.toEqual({
+      ...firstPerson,
+      birthDate: '1990-01-01',
+      image: null,
+      extraContacts: [],
+      businessCards: [],
+    });
 
     expect(prisma.job.createMany).toHaveBeenCalledWith({
       data: [{ userId: 'user-1', name: '개발/IT' }],
@@ -397,7 +395,7 @@ describe('PeopleService', () => {
         relationship: '동료',
         personality: '꼼꼼함',
         birthdayNotificationEnabled: true,
-        scheduleNotificationEnabled: false,
+        birthdayNotificationOffsetDays: 1,
       },
     });
   });
@@ -457,7 +455,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      scheduleNotificationEnabled: false,
+      birthdayNotificationOffsetDays: null,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
@@ -518,40 +516,38 @@ describe('PeopleService', () => {
           businessCardBackImage: backFile,
         },
       ),
-    ).resolves.toEqual(
-      {
-        ...person,
-        image: 'https://signed.example.com/profiles/profile.png',
-        extraContacts: [],
-        businessCards: [
-          {
-            id: 'business-card-1',
-            frontImageFile: {
-              id: 'front-media-id',
-              url: 'https://signed.example.com/cards/front.jpg',
-              type: MediaFileType.IMAGE,
-              usage: MediaFileUsage.BUSINESS_CARD_FRONT,
-              bucket: 'bucket',
-              s3Key: 'cards/front.jpg',
-              contentType: 'image/jpeg',
-              sizeBytes: 5,
-              originalName: 'front.jpg',
-            },
-            backImageFile: {
-              id: 'back-media-id',
-              url: 'https://signed.example.com/cards/back.jpg',
-              type: MediaFileType.IMAGE,
-              usage: MediaFileUsage.BUSINESS_CARD_BACK,
-              bucket: 'bucket',
-              s3Key: 'cards/back.jpg',
-              contentType: 'image/jpeg',
-              sizeBytes: 4,
-              originalName: 'back.jpg',
-            },
+    ).resolves.toEqual({
+      ...person,
+      image: 'https://signed.example.com/profiles/profile.png',
+      extraContacts: [],
+      businessCards: [
+        {
+          id: 'business-card-1',
+          frontImageFile: {
+            id: 'front-media-id',
+            url: 'https://signed.example.com/cards/front.jpg',
+            type: MediaFileType.IMAGE,
+            usage: MediaFileUsage.BUSINESS_CARD_FRONT,
+            bucket: 'bucket',
+            s3Key: 'cards/front.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 5,
+            originalName: 'front.jpg',
           },
-        ],
-      },
-    );
+          backImageFile: {
+            id: 'back-media-id',
+            url: 'https://signed.example.com/cards/back.jpg',
+            type: MediaFileType.IMAGE,
+            usage: MediaFileUsage.BUSINESS_CARD_BACK,
+            bucket: 'bucket',
+            s3Key: 'cards/back.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 4,
+            originalName: 'back.jpg',
+          },
+        },
+      ],
+    });
 
     expect(s3Service.uploadFile).toHaveBeenNthCalledWith(1, {
       body: profileFile.buffer,
@@ -585,7 +581,7 @@ describe('PeopleService', () => {
         relationship: undefined,
         personality: undefined,
         birthdayNotificationEnabled: false,
-        scheduleNotificationEnabled: false,
+        birthdayNotificationOffsetDays: null,
       },
     });
     expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(2, {
@@ -641,7 +637,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      scheduleNotificationEnabled: false,
+      birthdayNotificationOffsetDays: null,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
@@ -679,14 +675,12 @@ describe('PeopleService', () => {
         },
         {},
       ),
-    ).resolves.toEqual(
-      {
-        ...person,
-        image: null,
-        extraContacts: [emailContact, instagramContact],
-        businessCards: [],
-      },
-    );
+    ).resolves.toEqual({
+      ...person,
+      image: null,
+      extraContacts: [emailContact, instagramContact],
+      businessCards: [],
+    });
 
     expect(prisma.extraContact.create).toHaveBeenNthCalledWith(1, {
       data: {

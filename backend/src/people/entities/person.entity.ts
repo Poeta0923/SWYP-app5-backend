@@ -225,11 +225,12 @@ export class PersonEntity implements CreatedPersonResponse {
   })
   birthdayNotificationEnabled: boolean;
 
-  @ApiProperty({
-    example: false,
-    description: '일정 알림 활성화 여부',
+  @ApiPropertyOptional({
+    example: 1,
+    description: '생일 알림 발송 시점(생일 기준 며칠 전)',
+    nullable: true,
   })
-  scheduleNotificationEnabled: boolean;
+  birthdayNotificationOffsetDays: number | null;
 
   @ApiProperty({
     type: PersonExtraContactEntity,
