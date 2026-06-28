@@ -1,8 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  MediaFileType,
-  MediaFileUsage,
-} from '../../../generated/prisma/client';
 import type {
   CreatedPersonResponse,
   ImportedPersonListItemResponse,
@@ -22,51 +18,6 @@ export class PersonMediaFileEntity {
     description: '미디어 파일 CloudFront signed URL',
   })
   url: string;
-
-  @ApiProperty({
-    enum: MediaFileType,
-    example: MediaFileType.IMAGE,
-    description: '미디어 파일 유형',
-  })
-  type: MediaFileType;
-
-  @ApiProperty({
-    enum: MediaFileUsage,
-    example: MediaFileUsage.BUSINESS_CARD_FRONT,
-    description: '미디어 파일 사용처',
-  })
-  usage: MediaFileUsage;
-
-  @ApiProperty({
-    example: 'swyp-bucket',
-    description: 'S3 버킷 이름',
-  })
-  bucket: string;
-
-  @ApiProperty({
-    example: 'people/user-1/business-cards/front/card.png',
-    description: 'S3 object key',
-  })
-  s3Key: string;
-
-  @ApiProperty({
-    example: 'image/png',
-    description: 'MIME type',
-  })
-  contentType: string;
-
-  @ApiProperty({
-    example: 12345,
-    description: '파일 크기(bytes)',
-  })
-  sizeBytes: number;
-
-  @ApiPropertyOptional({
-    example: 'card.png',
-    description: '원본 파일명',
-    nullable: true,
-  })
-  originalName: string | null;
 }
 
 export class PersonBusinessCardEntity {
