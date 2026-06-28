@@ -217,7 +217,7 @@ export class PeopleController {
     return this.peopleService.getPerson(currentUser.sub, personId);
   }
 
-  @Patch(':personId/update')
+  @Patch(':personId')
   @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({

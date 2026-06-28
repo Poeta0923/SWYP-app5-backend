@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
@@ -73,11 +74,19 @@ const optionalInteger = ({ value }: { value: unknown }) => {
 };
 
 export class CreateExtraContactDto {
+  @ApiProperty({
+    description: '추가 연락처 종류',
+    example: 'email',
+  })
   @Transform(trimString)
   @IsString()
   @MinLength(1)
   type!: string;
 
+  @ApiProperty({
+    description: '추가 연락처 값',
+    example: 'user@example.com',
+  })
   @Transform(trimString)
   @IsString()
   @MinLength(1)
@@ -85,56 +94,101 @@ export class CreateExtraContactDto {
 }
 
 export class CreatePersonItemDto {
+  @ApiProperty({
+    description: '이름',
+    example: '홍길동',
+  })
   @Transform(trimString)
   @IsString()
   @MinLength(1)
   name!: string;
 
+  @ApiPropertyOptional({
+    description: '생년월일',
+    example: '1990-01-01',
+  })
   @Transform(emptyStringToUndefined)
   @IsOptional()
   @IsDateString()
   birthDate?: string;
 
+  @ApiPropertyOptional({
+    description: '중요 인물 여부',
+    example: true,
+  })
   @Transform(optionalBoolean)
   @IsOptional()
   @IsBoolean()
   isImportant?: boolean;
 
+  @ApiProperty({
+    description: '전화번호',
+    example: '010-1234-5678',
+  })
   @Transform(emptyStringToUndefined)
   @IsString()
   @MinLength(1)
   phoneNumber!: string;
 
+  @ApiPropertyOptional({
+    description: '직군',
+    example: '개발/IT',
+  })
   @Transform(emptyStringToUndefined)
   @IsOptional()
   @IsString()
   job?: string;
 
+  @ApiPropertyOptional({
+    description: '회사',
+    example: '토스',
+  })
   @Transform(emptyStringToUndefined)
   @IsOptional()
   @IsString()
   company?: string;
 
+  @ApiPropertyOptional({
+    description: '직책',
+    example: '과장',
+  })
   @Transform(emptyStringToUndefined)
   @IsOptional()
   @IsString()
   position?: string;
 
+  @ApiPropertyOptional({
+    description: '관계',
+    example: '동료',
+  })
   @Transform(emptyStringToUndefined)
   @IsOptional()
   @IsString()
   relationship?: string;
 
+  @ApiPropertyOptional({
+    description: '성격/메모',
+    example: '차분하고 꼼꼼함',
+  })
   @Transform(emptyStringToUndefined)
   @IsOptional()
   @IsString()
   personality?: string;
 
+  @ApiPropertyOptional({
+    description: '생일 알림 여부',
+    example: true,
+  })
   @Transform(optionalBoolean)
   @IsOptional()
   @IsBoolean()
   birthdayNotificationEnabled?: boolean;
 
+  @ApiPropertyOptional({
+    description: '생일 며칠 전 알림을 보낼지',
+    example: 1,
+    minimum: 0,
+  })
   @Transform(optionalInteger)
   @ValidateIf(
     (person: CreatePersonItemDto) =>
@@ -144,6 +198,20 @@ export class CreatePersonItemDto {
   @Min(0)
   birthdayNotificationOffsetDays?: number;
 
+  @ApiPropertyOptional({
+    description: '추가 연락처 목록',
+    type: [CreateExtraContactDto],
+    example: [
+      {
+        type: 'email',
+        content: 'user@example.com',
+      },
+      {
+        type: 'instagram',
+        content: '@hong',
+      },
+    ],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
