@@ -6,6 +6,7 @@ import {
   type AgreementStatusResponse,
 } from '../agreements/agreements.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { S3Service } from '../s3/s3.service';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -59,6 +60,7 @@ export class AuthService {
     private readonly sessionService: SessionService,
     private readonly tokenService: TokenService,
     private readonly agreementsService: AgreementsService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async loginWithGoogle(dto: GoogleLoginDto): Promise<GoogleLoginResult> {
@@ -199,6 +201,7 @@ export class AuthService {
   ): Promise<DeleteAccountResult> {
     // 파괴적 작업이므로 앱 access token만 믿지 않고 Google 재인증 ID Token까지 검증한다.
     const profile = await this.googleAuthService.verifyIdToken(dto.idToken);
+    let s3KeysToDelete: string[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       // Google sub(providerAccountId)를 기준으로 찾아야 이메일 변경에도 같은 계정을 안정적으로 식별할 수 있다.
@@ -219,7 +222,17 @@ export class AuthService {
         throw this.createGoogleAccountMismatchException();
       }
 
-      // Account/RefreshToken은 schema의 onDelete: Cascade로 함께 삭제된다.
+      const mediaFiles = await tx.mediaFile.findMany({
+        where: {
+          userId: currentUser.sub,
+        },
+        select: {
+          s3Key: true,
+        },
+      });
+      s3KeysToDelete = mediaFiles.map((mediaFile) => mediaFile.s3Key);
+
+      // Account/RefreshToken/MediaFile 등 유저 소유 DB 데이터는 schema의 onDelete: Cascade로 함께 삭제된다.
       // deleteMany를 쓰면 동시 탈퇴 등으로 이미 삭제된 경우에도 P2025가 500으로 새지 않는다.
       await tx.user.deleteMany({
         where: {
@@ -229,7 +242,11 @@ export class AuthService {
     });
 
     // Redis active-session key는 DB cascade 대상이 아니므로 별도로 정리한다.
-    await this.sessionService.deleteActiveSession(currentUser.sub);
+    try {
+      await this.s3Service.deleteFiles(s3KeysToDelete);
+    } finally {
+      await this.sessionService.deleteActiveSession(currentUser.sub);
+    }
 
     return {
       success: true,
