@@ -27,6 +27,9 @@ describe('AuthService', () => {
       updateMany: jest.Mock;
       deleteMany: jest.Mock;
     };
+    mediaFile: {
+      findMany: jest.Mock;
+    };
   };
   let googleAuthService: {
     verifyIdToken: jest.Mock;
@@ -47,6 +50,9 @@ describe('AuthService', () => {
   };
   let agreementsService: {
     getActiveAgreementStatuses: jest.Mock;
+  };
+  let s3Service: {
+    deleteFiles: jest.Mock;
   };
   let resolveTx: {
     account: {
@@ -134,6 +140,9 @@ describe('AuthService', () => {
         updateMany: jest.fn(),
         deleteMany: jest.fn(),
       },
+      mediaFile: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       $transaction: jest.fn().mockImplementation(async (callback) => {
         transactionCallCount += 1;
 
@@ -204,6 +213,9 @@ describe('AuthService', () => {
         ];
       }),
     };
+    s3Service = {
+      deleteFiles: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new AuthService(
       prisma as never,
@@ -211,6 +223,7 @@ describe('AuthService', () => {
       sessionService as never,
       tokenService as never,
       agreementsService as never,
+      s3Service as never,
     );
   });
 
@@ -619,6 +632,10 @@ describe('AuthService', () => {
     prisma.account.findUnique.mockResolvedValue({
       userId: user.id,
     });
+    prisma.mediaFile.findMany.mockResolvedValue([
+      { s3Key: 'profiles/profile.png' },
+      { s3Key: 'cards/front.jpg' },
+    ]);
     prisma.user.deleteMany.mockResolvedValue({ count: 1 });
 
     const result = await service.deleteAccount(
@@ -640,11 +657,23 @@ describe('AuthService', () => {
         userId: true,
       },
     });
+    expect(prisma.mediaFile.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: user.id,
+      },
+      select: {
+        s3Key: true,
+      },
+    });
     expect(prisma.user.deleteMany).toHaveBeenCalledWith({
       where: {
         id: user.id,
       },
     });
+    expect(s3Service.deleteFiles).toHaveBeenCalledWith([
+      'profiles/profile.png',
+      'cards/front.jpg',
+    ]);
     expect(sessionService.deleteActiveSession).toHaveBeenCalledWith(user.id);
     expect(result).toEqual({ success: true });
   });
@@ -667,6 +696,7 @@ describe('AuthService', () => {
     });
 
     expect(prisma.user.deleteMany).not.toHaveBeenCalled();
+    expect(s3Service.deleteFiles).not.toHaveBeenCalled();
     expect(sessionService.deleteActiveSession).not.toHaveBeenCalled();
   });
 
@@ -690,6 +720,7 @@ describe('AuthService', () => {
     });
 
     expect(prisma.user.deleteMany).not.toHaveBeenCalled();
+    expect(s3Service.deleteFiles).not.toHaveBeenCalled();
     expect(sessionService.deleteActiveSession).not.toHaveBeenCalled();
   });
 
@@ -706,6 +737,7 @@ describe('AuthService', () => {
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.user.deleteMany).not.toHaveBeenCalled();
+    expect(s3Service.deleteFiles).not.toHaveBeenCalled();
     expect(sessionService.deleteActiveSession).not.toHaveBeenCalled();
   });
 
@@ -728,7 +760,40 @@ describe('AuthService', () => {
         id: user.id,
       },
     });
+    expect(s3Service.deleteFiles).toHaveBeenCalledWith([]);
     expect(sessionService.deleteActiveSession).toHaveBeenCalledWith(user.id);
     expect(result).toEqual({ success: true });
+  });
+
+  it('clears the Redis session even when S3 deletion fails after account deletion', async () => {
+    const s3Error = new Error('s3 delete failed');
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback(prisma),
+    );
+    prisma.account.findUnique.mockResolvedValue({
+      userId: user.id,
+    });
+    prisma.mediaFile.findMany.mockResolvedValue([
+      { s3Key: 'profiles/profile.png' },
+    ]);
+    prisma.user.deleteMany.mockResolvedValue({ count: 1 });
+    s3Service.deleteFiles.mockRejectedValueOnce(s3Error);
+
+    await expect(
+      service.deleteAccount(
+        { sub: user.id, familyId: 'family-1', role: user.role },
+        { idToken: 'google-id-token' },
+      ),
+    ).rejects.toBe(s3Error);
+
+    expect(prisma.user.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: user.id,
+      },
+    });
+    expect(s3Service.deleteFiles).toHaveBeenCalledWith([
+      'profiles/profile.png',
+    ]);
+    expect(sessionService.deleteActiveSession).toHaveBeenCalledWith(user.id);
   });
 });
