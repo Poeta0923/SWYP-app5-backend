@@ -177,6 +177,7 @@ model Person {
   personality                 String?
   birthdayNotificationEnabled Boolean           @default(false) @map("birthday_notification_enabled")
   birthdayNotificationOffsetDays Int?           @map("birthday_notification_offset_days")
+  interactedAt                DateTime          @default(now()) @map("interacted_at")
   businessCards               BusinessCard[]
   extraContacts               ExtraContact[]
   schedules                   SchedulePerson[]
@@ -191,6 +192,7 @@ model Person {
 
   @@unique([id, userId])
   @@index([userId])
+  @@index([userId, isImportant, interactedAt])
   @@map("people")
 }
 
@@ -336,6 +338,7 @@ model Schedule {
 
   @@unique([id, userId])
   @@index([userId])
+  @@index([userId, scheduleTime])
   @@map("schedules")
 }
 
@@ -421,15 +424,16 @@ enum NotificationStatus {
 }
 
 model Record {
-  id          String          @id @default(cuid())
-  userId      String          @map("user_id")
-  type        RecordType      @default(TEXT)
-  title       String          @default("제목 없음")
-  content     String?
-  voiceFileId String?         @unique @map("voice_file_id")
-  people      RecordPerson[]
-  keywords    RecordKeyword[]
-  recordMemos RecordMemo[]
+  id                   String          @id @default(cuid())
+  userId               String          @map("user_id")
+  type                 RecordType      @default(TEXT)
+  title                String          @default("제목 없음")
+  content              String?
+  voiceFileId          String?         @unique @map("voice_file_id")
+  voiceDurationSeconds Int?            @map("voice_duration_seconds")
+  people               RecordPerson[]
+  keywords             RecordKeyword[]
+  recordMemos          RecordMemo[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -439,6 +443,7 @@ model Record {
 
   @@unique([id, userId])
   @@index([userId])
+  @@index([userId, createdAt])
   @@map("records")
 }
 

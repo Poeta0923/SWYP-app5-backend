@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { AgreementsModule } from './agreements/agreements.module';
 import { PeopleModule } from './people/people.module';
 import { S3Module } from './s3/s3.module';
+import { HomeModule } from './home/home.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { S3Module } from './s3/s3.module';
     AgreementsModule,
     PeopleModule,
     S3Module,
+    HomeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
