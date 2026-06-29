@@ -36,6 +36,10 @@ export interface PersonListItemResponse {
   phoneNumber: string;
   image: string | null;
   isImportant: boolean;
+  job: string | null;
+  company: string | null;
+  position: string | null;
+  relationship: string | null;
   updatedAt: string;
 }
 
@@ -325,6 +329,10 @@ export class PeopleService {
         name: true,
         phoneNumber: true,
         isImportant: true,
+        job: true,
+        company: true,
+        position: true,
+        relationship: true,
         updatedAt: true,
         profileImageFile: {
           select: {

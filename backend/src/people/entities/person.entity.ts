@@ -129,6 +129,34 @@ export class PersonListItemEntity implements PersonListItemResponse {
   })
   isImportant: boolean;
 
+  @ApiPropertyOptional({
+    example: '개발/IT',
+    description: '직군',
+    nullable: true,
+  })
+  job: string | null;
+
+  @ApiPropertyOptional({
+    example: '토스',
+    description: '회사',
+    nullable: true,
+  })
+  company: string | null;
+
+  @ApiPropertyOptional({
+    example: '과장',
+    description: '직책',
+    nullable: true,
+  })
+  position: string | null;
+
+  @ApiPropertyOptional({
+    example: '동료',
+    description: '관계',
+    nullable: true,
+  })
+  relationship: string | null;
+
   @ApiProperty({
     example: '2026-06-28T08:00:00.000Z',
     description: '인물 정보 수정 시각',
