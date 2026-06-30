@@ -3,10 +3,9 @@ import { Prisma, RecordType } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 
-const HOME_SCHEDULE_LIMIT = 3;
+const HOME_SCHEDULE_LIMIT = 5;
 const HOME_PERSON_LIMIT = 3;
 const HOME_RECORD_LIMIT = 5;
-const HOME_SCHEDULE_LOOKAHEAD_DAYS = 7;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface HomeScheduleResponse {
@@ -55,12 +54,9 @@ export class HomeService {
 
   async getHome(userId: string): Promise<HomeResponse> {
     const now = new Date();
-    const scheduleUntil = new Date(
-      now.getTime() + HOME_SCHEDULE_LOOKAHEAD_DAYS * MILLISECONDS_PER_DAY,
-    );
 
     const [schedules, people, records] = await Promise.all([
-      this.getSchedules(userId, now, scheduleUntil),
+      this.getSchedules(userId, now),
       this.getImportantPeople(userId),
       this.getRecentRecords(userId),
     ]);
@@ -71,14 +67,12 @@ export class HomeService {
   private async getSchedules(
     userId: string,
     now: Date,
-    scheduleUntil: Date,
   ): Promise<HomeScheduleResponse[]> {
     const schedules = await this.prisma.schedule.findMany({
       where: {
         userId,
         scheduleTime: {
           gte: now,
-          lte: scheduleUntil,
         },
       },
       select: {
