@@ -3,6 +3,7 @@ import {
   MediaFileType,
   MediaFileUsage,
   Prisma,
+  RecordType,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
@@ -42,6 +43,12 @@ interface TestTransactionClient {
     create: jest.Mock;
     deleteMany: jest.Mock;
   };
+  schedule: {
+    findMany: jest.Mock;
+  };
+  record: {
+    findMany: jest.Mock;
+  };
 }
 
 interface PrismaMock extends TestTransactionClient {
@@ -62,6 +69,7 @@ describe('PeopleService', () => {
   let service: PeopleService;
 
   beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-29T01:00:00.000Z'));
     prisma = {
       $transaction: jest
         .fn()
@@ -79,6 +87,8 @@ describe('PeopleService', () => {
             mediaFile: prisma.mediaFile,
             businessCard: prisma.businessCard,
             extraContact: prisma.extraContact,
+            schedule: prisma.schedule,
+            record: prisma.record,
           };
 
           return input(transactionClient);
@@ -118,6 +128,12 @@ describe('PeopleService', () => {
         create: jest.fn(),
         deleteMany: jest.fn(),
       },
+      schedule: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      record: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
     };
     s3Service = {
       uploadFile: jest.fn(),
@@ -130,6 +146,10 @@ describe('PeopleService', () => {
       prisma as unknown as PrismaService,
       s3Service as unknown as S3Service,
     );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('ensures default categories and returns category names from the database', async () => {
@@ -318,6 +338,53 @@ describe('PeopleService', () => {
         },
       ],
     });
+    prisma.schedule.findMany.mockResolvedValueOnce([
+      {
+        id: 'schedule-1',
+        title: '오늘 미팅',
+        scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
+      },
+      {
+        id: 'schedule-2',
+        title: '내일 점심',
+        scheduleTime: new Date('2026-06-30T03:00:00.000Z'),
+      },
+    ]);
+    prisma.record.findMany.mockResolvedValueOnce([
+      {
+        id: 'record-1',
+        type: RecordType.VOICE,
+        title: '최근 통화 기록',
+        createdAt: new Date('2026-06-29T00:30:00.000Z'),
+        voiceDurationSeconds: 125,
+        people: [
+          {
+            person: {
+              name: '김영희',
+            },
+          },
+          {
+            person: {
+              name: '홍길동',
+            },
+          },
+        ],
+      },
+      {
+        id: 'record-2',
+        type: RecordType.TEXT,
+        title: '이전 미팅 기록',
+        createdAt: new Date('2026-06-28T03:00:00.000Z'),
+        voiceDurationSeconds: null,
+        people: [
+          {
+            person: {
+              name: '홍길동',
+            },
+          },
+        ],
+      },
+    ]);
 
     await expect(service.getPerson('user-1', 'person-1')).resolves.toEqual({
       id: 'person-1',
@@ -348,6 +415,38 @@ describe('PeopleService', () => {
             url: 'https://signed.example.com/cards/front.jpg',
           },
           backImageFile: null,
+        },
+      ],
+      upcomingSchedules: [
+        {
+          id: 'schedule-1',
+          title: '오늘 미팅',
+          scheduleTime: '2026-06-29T08:00:00.000Z',
+          dDay: 'D-0',
+        },
+        {
+          id: 'schedule-2',
+          title: '내일 점심',
+          scheduleTime: '2026-06-30T03:00:00.000Z',
+          dDay: 'D-1',
+        },
+      ],
+      records: [
+        {
+          id: 'record-1',
+          type: RecordType.VOICE,
+          title: '최근 통화 기록',
+          people: ['김영희', '홍길동'],
+          createdAt: '2026-06-29T00:30:00.000Z',
+          voiceDuration: '02:05',
+        },
+        {
+          id: 'record-2',
+          type: RecordType.TEXT,
+          title: '이전 미팅 기록',
+          people: ['홍길동'],
+          createdAt: '2026-06-28T03:00:00.000Z',
+          voiceDuration: null,
         },
       ],
     });
@@ -402,6 +501,60 @@ describe('PeopleService', () => {
           orderBy: { createdAt: Prisma.SortOrder.asc },
         },
       },
+    });
+    expect(prisma.schedule.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        scheduleTime: {
+          gte: new Date('2026-06-29T01:00:00.000Z'),
+        },
+        people: {
+          some: {
+            userId: 'user-1',
+            personId: 'person-1',
+          },
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        scheduleTime: true,
+      },
+      orderBy: { scheduleTime: Prisma.SortOrder.asc },
+      take: 5,
+    });
+    expect(prisma.record.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        people: {
+          some: {
+            userId: 'user-1',
+            personId: 'person-1',
+          },
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        createdAt: true,
+        voiceDurationSeconds: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: Prisma.SortOrder.desc },
     });
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('cards/front.jpg');
@@ -476,6 +629,8 @@ describe('PeopleService', () => {
       birthDate: null,
       image: 'https://signed.example.com/profiles/profile.png',
       businessCards: [],
+      upcomingSchedules: [],
+      records: [],
     });
 
     expect(prisma.company.createMany).toHaveBeenCalledWith({
@@ -545,6 +700,8 @@ describe('PeopleService', () => {
       birthDate: null,
       image: null,
       businessCards: [],
+      upcomingSchedules: [],
+      records: [],
     });
 
     expect(prisma.person.update).toHaveBeenCalledWith({
@@ -696,6 +853,8 @@ describe('PeopleService', () => {
       birthDate: null,
       image: 'https://signed.example.com/profiles/new.png',
       businessCards: [],
+      upcomingSchedules: [],
+      records: [],
     });
 
     expect(s3Service.uploadFile).toHaveBeenCalledWith({
@@ -813,6 +972,8 @@ describe('PeopleService', () => {
       birthDate: null,
       image: 'https://signed.example.com/profiles/new.jpg',
       businessCards: [],
+      upcomingSchedules: [],
+      records: [],
     });
 
     expect(prisma.person.update).toHaveBeenCalledWith({
@@ -876,6 +1037,8 @@ describe('PeopleService', () => {
       birthDate: null,
       image: null,
       businessCards: [],
+      upcomingSchedules: [],
+      records: [],
     });
 
     expect(prisma.person.update).toHaveBeenCalledWith({

@@ -8,9 +8,14 @@ import {
   MediaFileType,
   MediaFileUsage,
   Prisma,
+  RecordType,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service, type UploadedS3File } from '../s3/s3.service';
+import type {
+  HomeRecordResponse,
+  HomeScheduleResponse,
+} from '../home/home.service';
 import type {
   CreateExtraContactDto,
   CreatePersonItemDto,
@@ -22,6 +27,9 @@ import {
   DEFAULT_POSITION_NAMES,
   DEFAULT_RELATIONSHIP_NAMES,
 } from './people.constants';
+
+const PERSON_UPCOMING_SCHEDULE_LIMIT = 5;
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface PersonCategoryNamesResponse {
   jobs: string[];
@@ -96,7 +104,10 @@ export interface CreatedPersonResponse {
   }[];
 }
 
-export type PersonDetailResponse = CreatedPersonResponse;
+export interface PersonDetailResponse extends CreatedPersonResponse {
+  upcomingSchedules: HomeScheduleResponse[];
+  records: HomeRecordResponse[];
+}
 
 interface PersonProfileImageFile {
   s3Key: string;
@@ -160,6 +171,11 @@ type PersonDetailQueryResult = {
   }[];
   businessCards: BusinessCardWithMediaFiles[];
 };
+
+type PersonDetailClient = Pick<
+  Prisma.TransactionClient,
+  'person' | 'schedule' | 'record'
+>;
 
 type ExistingPersonForUpdate = {
   id: string;
@@ -354,67 +370,7 @@ export class PeopleService {
     userId: string,
     personId: string,
   ): Promise<PersonDetailResponse> {
-    const person = await this.prisma.person.findFirst({
-      where: {
-        id: personId,
-        userId,
-      },
-      select: {
-        id: true,
-        name: true,
-        birthDate: true,
-        isImportant: true,
-        phoneNumber: true,
-        job: true,
-        company: true,
-        position: true,
-        relationship: true,
-        personality: true,
-        birthdayNotificationEnabled: true,
-        birthdayNotificationOffsetDays: true,
-        profileImageFile: {
-          select: {
-            s3Key: true,
-          },
-        },
-        extraContacts: {
-          select: {
-            id: true,
-            type: true,
-            content: true,
-          },
-          orderBy: { createdAt: Prisma.SortOrder.asc },
-        },
-        businessCards: {
-          select: {
-            id: true,
-            frontImageFile: {
-              select: {
-                id: true,
-                s3Key: true,
-              },
-            },
-            backImageFile: {
-              select: {
-                id: true,
-                s3Key: true,
-              },
-            },
-          },
-          orderBy: { createdAt: Prisma.SortOrder.asc },
-        },
-      },
-    });
-
-    if (!person) {
-      throw new NotFoundException({
-        code: 'PERSON_NOT_FOUND',
-        message: '인물을 찾을 수 없습니다.',
-        personId,
-      });
-    }
-
-    return this.toPersonDetailResponse(person);
+    return this.findPersonDetailOrThrow(this.prisma, userId, personId);
   }
 
   async updatePerson(
@@ -484,7 +440,7 @@ export class PeopleService {
         });
       }
 
-      return this.toPersonDetailResponse(updatedPerson);
+      return this.toPersonDetailResponse(tx, userId, updatedPerson);
     });
   }
 
@@ -1054,10 +1010,17 @@ export class PeopleService {
     };
   }
 
-  private toPersonDetailResponse(
+  private async toPersonDetailResponse(
+    client: PersonDetailClient,
+    userId: string,
     person: PersonDetailQueryResult,
-  ): PersonDetailResponse {
+  ): Promise<PersonDetailResponse> {
     const { profileImageFile, businessCards, ...personFields } = person;
+    const now = new Date();
+    const [upcomingSchedules, records] = await Promise.all([
+      this.getUpcomingSchedulesForPerson(client, userId, person.id, now),
+      this.getRecordsForPerson(client, userId, person.id),
+    ]);
 
     return {
       ...personFields,
@@ -1066,6 +1029,8 @@ export class PeopleService {
       businessCards: businessCards.map((businessCard) =>
         this.toBusinessCardResponse(businessCard),
       ),
+      upcomingSchedules,
+      records,
     };
   }
 
@@ -1079,11 +1044,11 @@ export class PeopleService {
   }
 
   private async findPersonDetailOrThrow(
-    tx: Prisma.TransactionClient,
+    client: PersonDetailClient,
     userId: string,
     personId: string,
   ): Promise<PersonDetailResponse> {
-    const person = await tx.person.findFirst({
+    const person = await client.person.findFirst({
       where: {
         id: personId,
         userId,
@@ -1099,7 +1064,135 @@ export class PeopleService {
       });
     }
 
-    return this.toPersonDetailResponse(person);
+    return this.toPersonDetailResponse(client, userId, person);
+  }
+
+  private async getUpcomingSchedulesForPerson(
+    client: Pick<Prisma.TransactionClient, 'schedule'>,
+    userId: string,
+    personId: string,
+    now: Date,
+  ): Promise<HomeScheduleResponse[]> {
+    const schedules = await client.schedule.findMany({
+      where: {
+        userId,
+        scheduleTime: {
+          gte: now,
+        },
+        people: {
+          some: {
+            userId,
+            personId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        scheduleTime: true,
+      },
+      orderBy: { scheduleTime: Prisma.SortOrder.asc },
+      take: PERSON_UPCOMING_SCHEDULE_LIMIT,
+    });
+
+    return schedules
+      .filter(
+        (
+          schedule,
+        ): schedule is typeof schedule & {
+          scheduleTime: Date;
+        } => schedule.scheduleTime !== null,
+      )
+      .map((schedule) => ({
+        id: schedule.id,
+        title: schedule.title,
+        scheduleTime: schedule.scheduleTime.toISOString(),
+        dDay: this.toDDay(now, schedule.scheduleTime),
+      }));
+  }
+
+  private async getRecordsForPerson(
+    client: Pick<Prisma.TransactionClient, 'record'>,
+    userId: string,
+    personId: string,
+  ): Promise<HomeRecordResponse[]> {
+    const records = await client.record.findMany({
+      where: {
+        userId,
+        people: {
+          some: {
+            userId,
+            personId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        createdAt: true,
+        voiceDurationSeconds: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: Prisma.SortOrder.desc },
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      type: record.type,
+      title: record.title,
+      people: record.people.map(({ person }) => person.name),
+      createdAt: record.createdAt.toISOString(),
+      voiceDuration:
+        record.type === RecordType.VOICE
+          ? this.toMinuteSecond(record.voiceDurationSeconds)
+          : null,
+    }));
+  }
+
+  private toDDay(now: Date, scheduleTime: Date): string {
+    const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const scheduleDate = new Date(
+      scheduleTime.getFullYear(),
+      scheduleTime.getMonth(),
+      scheduleTime.getDate(),
+    );
+    const daysLeft = Math.max(
+      0,
+      Math.floor(
+        (scheduleDate.getTime() - nowDate.getTime()) / MILLISECONDS_PER_DAY,
+      ),
+    );
+
+    return `D-${daysLeft}`;
+  }
+
+  private toMinuteSecond(seconds: number | null): string | null {
+    if (seconds === null) {
+      return null;
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    return `${this.padTimeUnit(minutes)}:${this.padTimeUnit(remainingSeconds)}`;
+  }
+
+  private padTimeUnit(value: number): string {
+    return value.toString().padStart(2, '0');
   }
 
   private toDateOnlyString(date: Date | null): string | null {
