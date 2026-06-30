@@ -109,7 +109,16 @@ export interface PersonDetailResponse extends CreatedPersonResponse {
   records: HomeRecordResponse[];
 }
 
+export interface DeletePersonResult {
+  success: true;
+}
+
 interface PersonProfileImageFile {
+  s3Key: string;
+}
+
+interface MediaFileForDeletion {
+  id: string;
   s3Key: string;
 }
 
@@ -183,6 +192,32 @@ type ExistingPersonForUpdate = {
   birthdayNotificationEnabled: boolean;
   birthdayNotificationOffsetDays: number | null;
 };
+
+type PersonForDeletion = {
+  id: string;
+  profileImageFile: MediaFileForDeletion | null;
+  businessCards: {
+    frontImageFile: MediaFileForDeletion | null;
+    backImageFile: MediaFileForDeletion | null;
+  }[];
+  records: {
+    recordId: string;
+    record: {
+      id: string;
+      voiceFile: MediaFileForDeletion | null;
+      _count: {
+        people: number;
+      };
+    };
+  }[];
+};
+
+interface PersonDeletionPlan {
+  mediaFileIds: string[];
+  s3Keys: string[];
+  orphanRecordIds: string[];
+  sharedRecordIds: string[];
+}
 
 @Injectable()
 export class PeopleService {
@@ -607,6 +642,81 @@ export class PeopleService {
     await this.deleteUploadedFiles([existingImage.s3Key]);
 
     return updatedPerson;
+  }
+
+  async deletePerson(
+    userId: string,
+    personId: string,
+  ): Promise<DeletePersonResult> {
+    let s3KeysToDelete: string[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      const person = await tx.person.findFirst({
+        where: {
+          id: personId,
+          userId,
+        },
+        select: this.personDeletionSelect(),
+      });
+
+      if (!person) {
+        throw new NotFoundException({
+          code: 'PERSON_NOT_FOUND',
+          message: '인물을 찾을 수 없습니다.',
+          personId,
+        });
+      }
+
+      const deletionPlan = this.toPersonDeletionPlan(person);
+      s3KeysToDelete = deletionPlan.s3Keys;
+
+      if (deletionPlan.mediaFileIds.length > 0) {
+        await tx.mediaFile.deleteMany({
+          where: {
+            userId,
+            id: {
+              in: deletionPlan.mediaFileIds,
+            },
+          },
+        });
+      }
+
+      if (deletionPlan.sharedRecordIds.length > 0) {
+        await tx.recordPerson.deleteMany({
+          where: {
+            userId,
+            personId,
+            recordId: {
+              in: deletionPlan.sharedRecordIds,
+            },
+          },
+        });
+      }
+
+      if (deletionPlan.orphanRecordIds.length > 0) {
+        await tx.record.deleteMany({
+          where: {
+            userId,
+            id: {
+              in: deletionPlan.orphanRecordIds,
+            },
+          },
+        });
+      }
+
+      await tx.person.deleteMany({
+        where: {
+          id: personId,
+          userId,
+        },
+      });
+    });
+
+    await this.s3Service.deleteFiles(s3KeysToDelete);
+
+    return {
+      success: true,
+    };
   }
 
   private async ensureDefaultCategories(userId: string): Promise<void> {
@@ -1263,6 +1373,95 @@ export class PeopleService {
         },
         orderBy: { createdAt: Prisma.SortOrder.asc },
       },
+    };
+  }
+
+  private personDeletionSelect() {
+    return {
+      id: true,
+      profileImageFile: {
+        select: {
+          id: true,
+          s3Key: true,
+        },
+      },
+      businessCards: {
+        select: {
+          frontImageFile: {
+            select: {
+              id: true,
+              s3Key: true,
+            },
+          },
+          backImageFile: {
+            select: {
+              id: true,
+              s3Key: true,
+            },
+          },
+        },
+      },
+      records: {
+        select: {
+          recordId: true,
+          record: {
+            select: {
+              id: true,
+              voiceFile: {
+                select: {
+                  id: true,
+                  s3Key: true,
+                },
+              },
+              _count: {
+                select: {
+                  people: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private toPersonDeletionPlan(person: PersonForDeletion): PersonDeletionPlan {
+    const mediaFileIds = new Set<string>();
+    const s3Keys = new Set<string>();
+    const orphanRecordIds: string[] = [];
+    const sharedRecordIds: string[] = [];
+    const addMediaFile = (file: MediaFileForDeletion | null) => {
+      if (!file) {
+        return;
+      }
+
+      mediaFileIds.add(file.id);
+      s3Keys.add(file.s3Key);
+    };
+
+    addMediaFile(person.profileImageFile);
+
+    for (const businessCard of person.businessCards) {
+      addMediaFile(businessCard.frontImageFile);
+      addMediaFile(businessCard.backImageFile);
+    }
+
+    for (const recordPerson of person.records) {
+      const record = recordPerson.record;
+
+      if (record._count.people <= 1) {
+        orphanRecordIds.push(record.id);
+        addMediaFile(record.voiceFile);
+      } else {
+        sharedRecordIds.push(record.id);
+      }
+    }
+
+    return {
+      mediaFileIds: [...mediaFileIds],
+      s3Keys: [...s3Keys],
+      orphanRecordIds,
+      sharedRecordIds,
     };
   }
 

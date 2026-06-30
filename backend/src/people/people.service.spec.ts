@@ -31,10 +31,12 @@ interface TestTransactionClient {
     findMany: jest.Mock;
     update: jest.Mock;
     updateMany: jest.Mock;
+    deleteMany: jest.Mock;
   };
   mediaFile: {
     create: jest.Mock;
     delete: jest.Mock;
+    deleteMany: jest.Mock;
   };
   businessCard: {
     create: jest.Mock;
@@ -48,6 +50,10 @@ interface TestTransactionClient {
   };
   record: {
     findMany: jest.Mock;
+    deleteMany: jest.Mock;
+  };
+  recordPerson: {
+    deleteMany: jest.Mock;
   };
 }
 
@@ -64,6 +70,7 @@ describe('PeopleService', () => {
   let s3Service: {
     uploadFile: jest.Mock;
     deleteFile: jest.Mock;
+    deleteFiles: jest.Mock;
     getSignedUrl: jest.Mock;
   };
   let service: PeopleService;
@@ -89,6 +96,7 @@ describe('PeopleService', () => {
             extraContact: prisma.extraContact,
             schedule: prisma.schedule,
             record: prisma.record,
+            recordPerson: prisma.recordPerson,
           };
 
           return input(transactionClient);
@@ -116,10 +124,12 @@ describe('PeopleService', () => {
         findMany: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       mediaFile: {
         create: jest.fn(),
         delete: jest.fn(),
+        deleteMany: jest.fn(),
       },
       businessCard: {
         create: jest.fn(),
@@ -133,11 +143,16 @@ describe('PeopleService', () => {
       },
       record: {
         findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn(),
+      },
+      recordPerson: {
+        deleteMany: jest.fn(),
       },
     };
     s3Service = {
       uploadFile: jest.fn(),
       deleteFile: jest.fn().mockResolvedValue(undefined),
+      deleteFiles: jest.fn().mockResolvedValue(undefined),
       getSignedUrl: jest.fn(
         (key: string) => `https://signed.example.com/${key}`,
       ),
@@ -1088,6 +1103,158 @@ describe('PeopleService', () => {
 
     expect(s3Service.uploadFile).not.toHaveBeenCalled();
     expect(prisma.person.update).not.toHaveBeenCalled();
+  });
+
+  it('throws not found when deleting a missing current user person', async () => {
+    prisma.person.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.deletePerson('user-1', 'person-missing'),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PERSON_NOT_FOUND',
+        message: '인물을 찾을 수 없습니다.',
+        personId: 'person-missing',
+      },
+    });
+    await expect(
+      service.deletePerson('user-1', 'person-missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.mediaFile.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.recordPerson.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.record.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.person.deleteMany).not.toHaveBeenCalled();
+    expect(s3Service.deleteFiles).not.toHaveBeenCalled();
+  });
+
+  it('deletes a person with owned media and deletes only orphan records', async () => {
+    prisma.person.findFirst.mockResolvedValueOnce({
+      id: 'person-1',
+      profileImageFile: {
+        id: 'profile-media-id',
+        s3Key: 'profiles/profile.png',
+      },
+      businessCards: [
+        {
+          frontImageFile: {
+            id: 'front-media-id',
+            s3Key: 'cards/front.jpg',
+          },
+          backImageFile: {
+            id: 'back-media-id',
+            s3Key: 'cards/back.jpg',
+          },
+        },
+      ],
+      records: [
+        {
+          recordId: 'record-orphan',
+          record: {
+            id: 'record-orphan',
+            voiceFile: {
+              id: 'voice-media-id',
+              s3Key: 'records/voice.m4a',
+            },
+            _count: {
+              people: 1,
+            },
+          },
+        },
+        {
+          recordId: 'record-shared',
+          record: {
+            id: 'record-shared',
+            voiceFile: {
+              id: 'shared-voice-media-id',
+              s3Key: 'records/shared-voice.m4a',
+            },
+            _count: {
+              people: 2,
+            },
+          },
+        },
+      ],
+    });
+
+    await expect(service.deletePerson('user-1', 'person-1')).resolves.toEqual({
+      success: true,
+    });
+
+    expect(prisma.person.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'person-1',
+          userId: 'user-1',
+        },
+      }),
+    );
+    expect(prisma.mediaFile.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        id: {
+          in: [
+            'profile-media-id',
+            'front-media-id',
+            'back-media-id',
+            'voice-media-id',
+          ],
+        },
+      },
+    });
+    expect(prisma.recordPerson.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        personId: 'person-1',
+        recordId: {
+          in: ['record-shared'],
+        },
+      },
+    });
+    expect(prisma.record.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        id: {
+          in: ['record-orphan'],
+        },
+      },
+    });
+    expect(prisma.person.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'person-1',
+        userId: 'user-1',
+      },
+    });
+    expect(s3Service.deleteFiles).toHaveBeenCalledWith([
+      'profiles/profile.png',
+      'cards/front.jpg',
+      'cards/back.jpg',
+      'records/voice.m4a',
+    ]);
+  });
+
+  it('deletes a person without S3 files without touching media or records', async () => {
+    prisma.person.findFirst.mockResolvedValueOnce({
+      id: 'person-1',
+      profileImageFile: null,
+      businessCards: [],
+      records: [],
+    });
+
+    await expect(service.deletePerson('user-1', 'person-1')).resolves.toEqual({
+      success: true,
+    });
+
+    expect(prisma.mediaFile.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.recordPerson.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.record.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.person.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'person-1',
+        userId: 'user-1',
+      },
+    });
+    expect(s3Service.deleteFiles).toHaveBeenCalledWith([]);
   });
 
   it('imports contact people with only name and phone number', async () => {
