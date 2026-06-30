@@ -163,26 +163,26 @@ model RefreshToken {
 }
 
 model Person {
-  id                          String            @id @default(cuid())
-  userId                      String            @map("user_id")
-  name                        String
-  profileImageFileId          String?           @unique @map("profile_image_file_id")
-  birthDate                   DateTime?         @map("birth_date") @db.Date
-  isImportant                 Boolean           @default(false) @map("is_important")
-  phoneNumber                 String            @map("phone_number")
-  job                         String?
-  company                     String?
-  position                    String?
-  relationship                String?
-  personality                 String?
-  birthdayNotificationEnabled Boolean           @default(false) @map("birthday_notification_enabled")
-  birthdayNotificationOffsetDays Int?           @map("birthday_notification_offset_days")
-  interactedAt                DateTime          @default(now()) @map("interacted_at")
-  businessCards               BusinessCard[]
-  extraContacts               ExtraContact[]
-  schedules                   SchedulePerson[]
-  records                     RecordPerson[]
-  notificationJobs            NotificationJob[]
+  id                             String            @id @default(cuid())
+  userId                         String            @map("user_id")
+  name                           String
+  profileImageFileId             String?           @unique @map("profile_image_file_id")
+  birthDate                      DateTime?         @map("birth_date") @db.Date
+  isImportant                    Boolean           @default(false) @map("is_important")
+  phoneNumber                    String            @map("phone_number")
+  job                            String?
+  company                        String?
+  position                       String?
+  relationship                   String?
+  personality                    String?
+  birthdayNotificationEnabled    Boolean           @default(false) @map("birthday_notification_enabled")
+  birthdayNotificationOffsetDays Int               @default(1) @map("birthday_notification_offset_days")
+  interactedAt                   DateTime          @default(now()) @map("interacted_at")
+  businessCards                  BusinessCard[]
+  extraContacts                  ExtraContact[]
+  schedules                      SchedulePerson[]
+  records                        RecordPerson[]
+  notificationJobs               NotificationJob[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
