@@ -55,9 +55,13 @@ const optionalBoolean = ({ value }: { value: unknown }) => {
   return value;
 };
 
-const optionalNullableInteger = ({ value }: { value: unknown }) => {
-  if (value === '' || value === null || value === undefined) {
-    return value === '' ? null : value;
+const optionalInteger = ({ value }: { value: unknown }) => {
+  if (value === '' || value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return value;
   }
 
   if (typeof value === 'number') {
@@ -70,7 +74,7 @@ const optionalNullableInteger = ({ value }: { value: unknown }) => {
 
   const trimmedValue = value.trim();
 
-  return trimmedValue.length === 0 ? null : Number(trimmedValue);
+  return trimmedValue.length === 0 ? undefined : Number(trimmedValue);
 };
 
 export class UpdatePersonItemDto {
@@ -165,7 +169,7 @@ export class UpdatePersonItemDto {
 
   @ApiPropertyOptional({
     description:
-      '생일 알림 여부. false로 보내면 birthdayNotificationOffsetDays도 null로 저장합니다.',
+      '생일 알림 여부. 알림 기준일은 birthdayNotificationOffsetDays에 저장된 값을 사용합니다.',
     example: true,
   })
   @Transform(optionalBoolean)
@@ -174,17 +178,15 @@ export class UpdatePersonItemDto {
   birthdayNotificationEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description:
-      '생일 며칠 전 알림을 보낼지. 생일 알림이 켜진 최종 상태에서는 필수입니다.',
+    description: '생일 며칠 전 알림을 보낼지. 생략하면 기존 값을 유지합니다.',
     example: 1,
     minimum: 0,
-    nullable: true,
   })
-  @Transform(optionalNullableInteger)
-  @IsOptional()
+  @Transform(optionalInteger)
+  @ValidateIf(isDefined)
   @IsInt()
   @Min(0)
-  birthdayNotificationOffsetDays?: number | null;
+  birthdayNotificationOffsetDays?: number;
 
   @ApiPropertyOptional({
     description:

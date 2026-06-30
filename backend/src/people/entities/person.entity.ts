@@ -253,9 +253,8 @@ export class PersonEntity implements CreatedPersonResponse {
   @ApiPropertyOptional({
     example: 1,
     description: '생일 알림 발송 시점(생일 기준 며칠 전)',
-    nullable: true,
   })
-  birthdayNotificationOffsetDays: number | null;
+  birthdayNotificationOffsetDays: number;
 
   @ApiProperty({
     type: PersonExtraContactEntity,

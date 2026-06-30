@@ -457,17 +457,6 @@ describe('PeopleController', () => {
           name: '홍길동',
           phoneNumber: '010-1234-5678',
           birthdayNotificationEnabled: true,
-        }),
-        [],
-      ),
-    ).toThrow(BadRequestException);
-    expect(() =>
-      controller.createPerson(
-        currentUser,
-        JSON.stringify({
-          name: '홍길동',
-          phoneNumber: '010-1234-5678',
-          birthdayNotificationEnabled: true,
           birthdayNotificationOffsetDays: -1,
         }),
         [],

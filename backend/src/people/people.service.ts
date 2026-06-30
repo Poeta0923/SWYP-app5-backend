@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -30,6 +29,7 @@ import {
 
 const PERSON_UPCOMING_SCHEDULE_LIMIT = 5;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const DEFAULT_BIRTHDAY_NOTIFICATION_OFFSET_DAYS = 1;
 
 export interface PersonCategoryNamesResponse {
   jobs: string[];
@@ -85,7 +85,7 @@ export interface CreatedPersonResponse {
   relationship: string | null;
   personality: string | null;
   birthdayNotificationEnabled: boolean;
-  birthdayNotificationOffsetDays: number | null;
+  birthdayNotificationOffsetDays: number;
   extraContacts: {
     id: string;
     type: string;
@@ -171,7 +171,7 @@ type PersonDetailQueryResult = {
   relationship: string | null;
   personality: string | null;
   birthdayNotificationEnabled: boolean;
-  birthdayNotificationOffsetDays: number | null;
+  birthdayNotificationOffsetDays: number;
   profileImageFile: PersonProfileImageFile | null;
   extraContacts: {
     id: string;
@@ -190,7 +190,7 @@ type ExistingPersonForUpdate = {
   id: string;
   phoneNumber: string;
   birthdayNotificationEnabled: boolean;
-  birthdayNotificationOffsetDays: number | null;
+  birthdayNotificationOffsetDays: number;
 };
 
 type PersonForDeletion = {
@@ -274,9 +274,8 @@ export class PeopleService {
             birthdayNotificationEnabled:
               item.birthdayNotificationEnabled ?? false,
             birthdayNotificationOffsetDays:
-              item.birthdayNotificationEnabled === true
-                ? item.birthdayNotificationOffsetDays
-                : null,
+              item.birthdayNotificationOffsetDays ??
+              DEFAULT_BIRTHDAY_NOTIFICATION_OFFSET_DAYS,
           },
         });
         const extraContacts = await this.createExtraContacts(
@@ -428,8 +427,6 @@ export class PeopleService {
         personId,
       );
     }
-
-    this.assertBirthdayNotificationUpdateIsValid(existingPerson, item);
 
     return this.prisma.$transaction(async (tx) => {
       await this.createMissingCategoryNames(tx, userId, [item]);
@@ -837,34 +834,6 @@ export class PeopleService {
     return existingPerson.profileImageFile;
   }
 
-  private assertBirthdayNotificationUpdateIsValid(
-    existingPerson: ExistingPersonForUpdate,
-    item: UpdatePersonItemDto,
-  ): void {
-    const birthdayNotificationEnabled = this.hasOwn(
-      item,
-      'birthdayNotificationEnabled',
-    )
-      ? item.birthdayNotificationEnabled
-      : existingPerson.birthdayNotificationEnabled;
-    const birthdayNotificationOffsetDays = this.hasOwn(
-      item,
-      'birthdayNotificationOffsetDays',
-    )
-      ? item.birthdayNotificationOffsetDays
-      : existingPerson.birthdayNotificationOffsetDays;
-
-    if (
-      birthdayNotificationEnabled === true &&
-      birthdayNotificationOffsetDays == null
-    ) {
-      throw new BadRequestException({
-        code: 'BIRTHDAY_NOTIFICATION_OFFSET_REQUIRED',
-        message: '생일 알림을 켜려면 알림 기준일이 필요합니다.',
-      });
-    }
-  }
-
   private toPersonUpdateData(
     item: UpdatePersonItemDto,
   ): Prisma.PersonUpdateInput {
@@ -902,9 +871,6 @@ export class PeopleService {
     }
     if (this.hasOwn(item, 'birthdayNotificationOffsetDays')) {
       data.birthdayNotificationOffsetDays = item.birthdayNotificationOffsetDays;
-    }
-    if (item.birthdayNotificationEnabled === false) {
-      data.birthdayNotificationOffsetDays = null;
     }
 
     return data;

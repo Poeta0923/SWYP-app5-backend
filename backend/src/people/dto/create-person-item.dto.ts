@@ -9,7 +9,6 @@ import {
   IsString,
   Min,
   MinLength,
-  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -185,15 +184,12 @@ export class CreatePersonItemDto {
   birthdayNotificationEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: '생일 며칠 전 알림을 보낼지',
+    description: '생일 며칠 전 알림을 보낼지. 생략하면 1일 전으로 저장합니다.',
     example: 1,
     minimum: 0,
   })
   @Transform(optionalInteger)
-  @ValidateIf(
-    (person: CreatePersonItemDto) =>
-      person.birthdayNotificationEnabled === true,
-  )
+  @IsOptional()
   @IsInt()
   @Min(0)
   birthdayNotificationOffsetDays?: number;

@@ -605,7 +605,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: '꼼꼼함',
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: null,
+      birthdayNotificationOffsetDays: 1,
       profileImageFile: {
         s3Key: 'profiles/profile.png',
       },
@@ -666,7 +666,6 @@ describe('PeopleService', () => {
         company: '토스',
         personality: '꼼꼼함',
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: null,
       },
     });
     expect(prisma.extraContact.deleteMany).not.toHaveBeenCalled();
@@ -689,7 +688,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: null,
+      birthdayNotificationOffsetDays: 1,
       profileImageFile: null,
       extraContacts: [],
       businessCards: [],
@@ -699,7 +698,7 @@ describe('PeopleService', () => {
         id: 'person-1',
         phoneNumber: '010-1234-5678',
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: null,
+        birthdayNotificationOffsetDays: 1,
       })
       .mockResolvedValueOnce(updatedPerson);
 
@@ -743,7 +742,7 @@ describe('PeopleService', () => {
         id: 'person-1',
         phoneNumber: '010-1234-5678',
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: null,
+        birthdayNotificationOffsetDays: 1,
       })
       .mockResolvedValueOnce({ id: 'person-2' });
 
@@ -772,25 +771,59 @@ describe('PeopleService', () => {
     expect(prisma.person.update).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid birthday notification update final state', async () => {
-    prisma.person.findFirst.mockResolvedValueOnce({
+  it('updates birthday notification enabled without requiring offset in the payload', async () => {
+    const updatedPerson = {
       id: 'person-1',
+      name: '홍길동',
+      birthDate: null,
+      isImportant: false,
       phoneNumber: '010-1234-5678',
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
       birthdayNotificationEnabled: true,
       birthdayNotificationOffsetDays: 1,
-    });
+      profileImageFile: null,
+      extraContacts: [],
+      businessCards: [],
+    };
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        phoneNumber: '010-1234-5678',
+        birthdayNotificationEnabled: false,
+        birthdayNotificationOffsetDays: 1,
+      })
+      .mockResolvedValueOnce(updatedPerson);
+
+    const { profileImageFile: _profileImageFile, ...expectedPerson } =
+      updatedPerson;
 
     await expect(
       service.updatePerson('user-1', 'person-1', {
-        birthdayNotificationOffsetDays: null,
+        birthdayNotificationEnabled: true,
       }),
-    ).rejects.toMatchObject({
-      response: {
-        code: 'BIRTHDAY_NOTIFICATION_OFFSET_REQUIRED',
-        message: '생일 알림을 켜려면 알림 기준일이 필요합니다.',
+    ).resolves.toEqual({
+      ...expectedPerson,
+      birthDate: null,
+      image: null,
+      businessCards: [],
+      upcomingSchedules: [],
+      records: [],
+    });
+    expect(prisma.person.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'person-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        birthdayNotificationEnabled: true,
       },
     });
-    expect(prisma.person.update).not.toHaveBeenCalled();
   });
 
   it('throws not found when updating a missing current user person', async () => {
@@ -833,7 +866,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: null,
+      birthdayNotificationOffsetDays: 1,
       profileImageFile: {
         s3Key: 'profiles/new.png',
       },
@@ -950,7 +983,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: null,
+      birthdayNotificationOffsetDays: 1,
       profileImageFile: {
         s3Key: 'profiles/new.jpg',
       },
@@ -1027,7 +1060,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: null,
+      birthdayNotificationOffsetDays: 1,
       profileImageFile: null,
       extraContacts: [],
       businessCards: [],
@@ -1468,7 +1501,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: null,
+      birthdayNotificationOffsetDays: 1,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
@@ -1580,7 +1613,7 @@ describe('PeopleService', () => {
         relationship: undefined,
         personality: undefined,
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: null,
+        birthdayNotificationOffsetDays: 1,
       },
     });
     expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(2, {
@@ -1636,7 +1669,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: null,
+      birthdayNotificationOffsetDays: 1,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
