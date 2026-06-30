@@ -23,6 +23,7 @@ describe('PeopleController', () => {
     addPersonProfileImage: jest.Mock;
     updatePersonProfileImage: jest.Mock;
     deletePersonProfileImage: jest.Mock;
+    deletePerson: jest.Mock;
     getCategoryNames: jest.Mock;
   };
   let controller: PeopleController;
@@ -37,6 +38,7 @@ describe('PeopleController', () => {
       addPersonProfileImage: jest.fn().mockResolvedValue({}),
       updatePersonProfileImage: jest.fn().mockResolvedValue({}),
       deletePersonProfileImage: jest.fn().mockResolvedValue({}),
+      deletePerson: jest.fn().mockResolvedValue({ success: true }),
       getCategoryNames: jest.fn().mockResolvedValue({
         jobs: [],
         companies: [],
@@ -309,6 +311,37 @@ describe('PeopleController', () => {
       Reflect.getMetadata(GUARDS_METADATA, deleteProfileImageHandler),
     ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
     expect(peopleService.deletePersonProfileImage).toHaveBeenCalledWith(
+      'user-1',
+      'person-1',
+    );
+  });
+
+  it('registers DELETE /people/:personId and deletes one person', async () => {
+    const deletePersonHandler = Object.getOwnPropertyDescriptor(
+      PeopleController.prototype,
+      'deletePerson',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(
+      controller.deletePerson(currentUser, 'person-1'),
+    ).resolves.toEqual({ success: true });
+
+    expect(Reflect.getMetadata(PATH_METADATA, deletePersonHandler)).toBe(
+      ':personId',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, deletePersonHandler)).toBe(
+      RequestMethod.DELETE,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, deletePersonHandler)).toEqual([
+      JwtAuthGuard,
+      RequiredAgreementsGuard,
+    ]);
+    expect(peopleService.deletePerson).toHaveBeenCalledWith(
       'user-1',
       'person-1',
     );

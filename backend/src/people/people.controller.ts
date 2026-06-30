@@ -358,6 +358,34 @@ export class PeopleController {
     );
   }
 
+  @Delete(':personId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '인물 삭제' })
+  @ApiOkResponse({
+    description: '인물 삭제 성공',
+    schema: {
+      example: {
+        success: true,
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '인물을 찾을 수 없음',
+  })
+  deletePerson(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('personId') personId: string,
+  ) {
+    return this.peopleService.deletePerson(currentUser.sub, personId);
+  }
+
   @Patch(':personId')
   @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
   @ApiBearerAuth('access-token')
