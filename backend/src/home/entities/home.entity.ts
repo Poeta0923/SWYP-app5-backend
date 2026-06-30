@@ -133,7 +133,7 @@ export class HomeResponseEntity implements HomeResponse {
   @ApiProperty({
     type: HomeScheduleEntity,
     isArray: true,
-    description: '7일 이내 가까운 일정 최대 3개',
+    description: '전체 다가오는 일정 중 가까운 일정 최대 5개',
   })
   schedules: HomeScheduleEntity[];
 

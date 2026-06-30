@@ -174,7 +174,6 @@ describe('HomeService', () => {
         userId: 'user-1',
         scheduleTime: {
           gte: new Date('2026-06-29T01:00:00.000Z'),
-          lte: new Date('2026-07-06T01:00:00.000Z'),
         },
       },
       select: {
@@ -183,7 +182,7 @@ describe('HomeService', () => {
         scheduleTime: true,
       },
       orderBy: { scheduleTime: Prisma.SortOrder.asc },
-      take: 3,
+      take: 5,
     });
     expect(prisma.person.findMany).toHaveBeenCalledWith({
       where: {
