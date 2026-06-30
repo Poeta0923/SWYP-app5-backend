@@ -40,6 +40,7 @@ import { UpdatePersonItemDto } from './dto/update-person-item.dto';
 import { PersonCategoryNamesEntity } from './entities/person-category-names.entity';
 import {
   ImportedPersonListItemEntity,
+  PersonDetailEntity,
   PersonEntity,
   PersonListItemEntity,
 } from './entities/person.entity';
@@ -228,7 +229,7 @@ export class PeopleController {
   @ApiOperation({ summary: '인물 상세 조회' })
   @ApiOkResponse({
     description: '현재 사용자의 인물 상세 정보 조회 성공',
-    type: PersonEntity,
+    type: PersonDetailEntity,
   })
   @ApiUnauthorizedResponse({
     description: 'Access token 검증 실패 또는 세션 만료',
@@ -264,7 +265,7 @@ export class PeopleController {
   @ApiBody({ type: PersonProfileImageMultipartDto })
   @ApiCreatedResponse({
     description: '프로필 이미지 추가 성공',
-    type: PersonEntity,
+    type: PersonDetailEntity,
   })
   @ApiBadRequestResponse({
     description: '파일 검증 실패',
@@ -304,7 +305,7 @@ export class PeopleController {
   @ApiBody({ type: PersonProfileImageMultipartDto })
   @ApiOkResponse({
     description: '프로필 이미지 변경 성공',
-    type: PersonEntity,
+    type: PersonDetailEntity,
   })
   @ApiBadRequestResponse({
     description: '파일 검증 실패',
@@ -336,7 +337,7 @@ export class PeopleController {
   @ApiOperation({ summary: '인물 프로필 이미지 삭제' })
   @ApiOkResponse({
     description: '프로필 이미지 삭제 성공',
-    type: PersonEntity,
+    type: PersonDetailEntity,
   })
   @ApiUnauthorizedResponse({
     description: 'Access token 검증 실패 또는 세션 만료',
@@ -368,7 +369,7 @@ export class PeopleController {
   @ApiBody({ type: UpdatePersonItemDto })
   @ApiOkResponse({
     description: '인물 정보 수정 성공',
-    type: PersonEntity,
+    type: PersonDetailEntity,
   })
   @ApiBadRequestResponse({
     description: '요청 body 검증 실패',

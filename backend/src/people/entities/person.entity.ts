@@ -2,8 +2,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type {
   CreatedPersonResponse,
   ImportedPersonListItemResponse,
+  PersonDetailResponse,
   PersonListItemResponse,
 } from '../people.service';
+import {
+  HomeRecordEntity,
+  HomeScheduleEntity,
+} from '../../home/entities/home.entity';
 
 export class PersonMediaFileEntity {
   @ApiProperty({
@@ -265,4 +270,23 @@ export class PersonEntity implements CreatedPersonResponse {
     description: '명함 목록',
   })
   businessCards: PersonBusinessCardEntity[];
+}
+
+export class PersonDetailEntity
+  extends PersonEntity
+  implements PersonDetailResponse
+{
+  @ApiProperty({
+    type: HomeScheduleEntity,
+    isArray: true,
+    description: '해당 인물과 연결된 다가오는 일정 중 가까운 일정 최대 5개',
+  })
+  upcomingSchedules: HomeScheduleEntity[];
+
+  @ApiProperty({
+    type: HomeRecordEntity,
+    isArray: true,
+    description: '해당 인물과 연결된 모든 기록 목록(최근 작성순)',
+  })
+  records: HomeRecordEntity[];
 }
