@@ -11,6 +11,7 @@ import { AgreementsModule } from './agreements/agreements.module';
 import { PeopleModule } from './people/people.module';
 import { S3Module } from './s3/s3.module';
 import { HomeModule } from './home/home.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { HomeModule } from './home/home.module';
     PeopleModule,
     S3Module,
     HomeModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
