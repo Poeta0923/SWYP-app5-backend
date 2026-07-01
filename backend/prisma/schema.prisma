@@ -330,6 +330,7 @@ model Schedule {
   notificationEnabled Boolean           @default(false) @map("notification_enabled")
   people              SchedulePerson[]
   notificationJobs    NotificationJob[]
+  record              Record?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -430,16 +431,18 @@ model Record {
   title                String          @default("제목 없음")
   content              String?
   voiceFileId          String?         @unique @map("voice_file_id")
+  scheduleId           String?         @unique @map("schedule_id")
   voiceDurationSeconds Int?            @map("voice_duration_seconds")
   people               RecordPerson[]
   keywords             RecordKeyword[]
-  recordMemos          RecordMemo[]
+  recordMemo           RecordMemo?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   voiceFile MediaFile? @relation("RecordVoiceFile", fields: [voiceFileId], references: [id], onDelete: SetNull)
+  schedule  Schedule?  @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
 
   @@unique([id, userId])
   @@index([userId])
@@ -482,11 +485,10 @@ model RecordKeyword {
 }
 
 model RecordMemo {
-  id           String @id @default(cuid())
-  userId       String @map("user_id")
-  recordId     String @map("record_id")
-  content      String
-  startSeconds Int    @map("start_seconds")
+  id       String @id @default(cuid())
+  userId   String @map("user_id")
+  recordId String @map("record_id")
+  content  String
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   record Record @relation(fields: [recordId, userId], references: [id, userId], onDelete: Cascade)
@@ -494,6 +496,7 @@ model RecordMemo {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@unique([recordId, userId])
   @@index([userId])
   @@index([recordId])
   @@map("record_memos")
