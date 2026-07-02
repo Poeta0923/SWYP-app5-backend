@@ -277,21 +277,30 @@ describe('RecordService', () => {
       .mockResolvedValueOnce({
         id: 'record-1',
         title: '미팅 기록',
-        updatedAt: new Date('2026-07-02T02:00:00.000Z'),
+        createdAt: new Date('2026-07-02T01:00:00.000Z'),
+        content: '회의 내용 전문',
+        keywords: [{ name: '미팅' }, { name: '후속 액션' }],
         recordMemo: {
           content: '다시 볼 것',
+        },
+        voiceFile: {
+          s3Key: 'records/user-1/voice/recording.m4a',
         },
         people: [
           {
             person: {
               id: 'person-2',
               name: '김영희',
+              profileImageFile: null,
             },
           },
           {
             person: {
               id: 'person-1',
               name: '홍길동',
+              profileImageFile: {
+                s3Key: 'people/user-1/profiles/profile.png',
+              },
             },
           },
         ],
@@ -314,18 +323,25 @@ describe('RecordService', () => {
     ).resolves.toEqual({
       recordId: 'record-1',
       title: '미팅 기록',
-      recordMemo: '다시 볼 것',
-      people: [
+      createdAt: '2026-07-02T01:00:00.000Z',
+      recordPeople: [
         {
           id: 'person-2',
           name: '김영희',
+          image: null,
         },
         {
           id: 'person-1',
           name: '홍길동',
+          image:
+            'https://signed.example.com/people/user-1/profiles/profile.png',
         },
       ],
-      updatedAt: '2026-07-02T02:00:00.000Z',
+      recordKeywords: ['미팅', '후속 액션'],
+      content: '회의 내용 전문',
+      recordMemo: '다시 볼 것',
+      voiceFileUrl:
+        'https://signed.example.com/records/user-1/voice/recording.m4a',
     });
 
     expect(prisma.record.findFirst).toHaveBeenNthCalledWith(1, {
@@ -407,10 +423,24 @@ describe('RecordService', () => {
       select: {
         id: true,
         title: true,
-        updatedAt: true,
+        createdAt: true,
+        content: true,
+        keywords: {
+          select: {
+            name: true,
+          },
+          orderBy: {
+            name: Prisma.SortOrder.asc,
+          },
+        },
         recordMemo: {
           select: {
             content: true,
+          },
+        },
+        voiceFile: {
+          select: {
+            s3Key: true,
           },
         },
         people: {
@@ -419,6 +449,11 @@ describe('RecordService', () => {
               select: {
                 id: true,
                 name: true,
+                profileImageFile: {
+                  select: {
+                    s3Key: true,
+                  },
+                },
               },
             },
           },
@@ -438,8 +473,11 @@ describe('RecordService', () => {
       .mockResolvedValueOnce({
         id: 'record-1',
         title: '미팅 기록',
-        updatedAt: new Date('2026-07-02T02:00:00.000Z'),
+        createdAt: new Date('2026-07-02T01:00:00.000Z'),
+        content: '회의 내용 전문',
+        keywords: [],
         recordMemo: null,
+        voiceFile: null,
         people: [],
       });
     prisma.record.update.mockResolvedValue({});
@@ -454,9 +492,12 @@ describe('RecordService', () => {
     ).resolves.toEqual({
       recordId: 'record-1',
       title: '미팅 기록',
+      createdAt: '2026-07-02T01:00:00.000Z',
+      recordPeople: [],
+      recordKeywords: [],
+      content: '회의 내용 전문',
       recordMemo: null,
-      people: [],
-      updatedAt: '2026-07-02T02:00:00.000Z',
+      voiceFileUrl: null,
     });
 
     expect(prisma.person.findMany).not.toHaveBeenCalled();
