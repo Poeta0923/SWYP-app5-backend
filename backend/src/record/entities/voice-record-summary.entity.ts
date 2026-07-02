@@ -34,6 +34,14 @@ export class VoiceRecordSummaryEntity implements VoiceRecordSummaryResponse {
   content: string;
 
   @ApiProperty({
+    example:
+      'https://cdn.example.com/records/user-1/voice/recording.m4a?Expires=...',
+    description: '음성 녹음 파일 CloudFront signed URL',
+    nullable: true,
+  })
+  voiceFileUrl: string | null;
+
+  @ApiProperty({
     example: '미팅에서 나온 후속 액션을 정리해 주세요.',
     description: '기록 메모',
   })
