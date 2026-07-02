@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   UploadedFile,
   UseGuards,
@@ -30,8 +31,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { HomeRecordEntity } from '../home/entities/home.entity';
 import { CreateVoiceRecordSttMultipartDto } from './dto/create-voice-record-stt-multipart.dto';
+import { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
 import { VoiceRecordSummaryEntity } from './entities/voice-record-summary.entity';
 import { VoiceRecordSttEntity } from './entities/voice-record-stt.entity';
+import { VoiceRecordUpdateEntity } from './entities/voice-record-update.entity';
 import {
   RECORD_MEMO_MAX_LENGTH,
   RECORD_VOICE_FILE_FIELD_NAME,
@@ -179,6 +182,39 @@ export class RecordController {
     @Param('recordId') recordId: string,
   ) {
     return this.recordService.summarizeVoiceRecord(currentUser.sub, recordId);
+  }
+
+  @Patch('voice/:recordId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '음성 기록 수정',
+    description:
+      '음성 기록의 제목, 기록 메모, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체합니다.',
+  })
+  @ApiBody({ type: UpdateVoiceRecordDto })
+  @ApiOkResponse({
+    description: '음성 기록 수정 성공',
+    type: VoiceRecordUpdateEntity,
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패 또는 연결할 인물을 찾을 수 없음',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '음성 기록을 찾을 수 없음',
+  })
+  updateVoiceRecord(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('recordId') recordId: string,
+    @Body() dto: UpdateVoiceRecordDto,
+  ) {
+    return this.recordService.updateVoiceRecord(currentUser.sub, recordId, dto);
   }
 }
 
