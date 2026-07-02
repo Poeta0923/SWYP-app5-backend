@@ -35,7 +35,6 @@ import { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
 import { VoiceRecordDetailEntity } from './entities/voice-record-detail.entity';
 import { VoiceRecordSummaryEntity } from './entities/voice-record-summary.entity';
 import { VoiceRecordSttEntity } from './entities/voice-record-stt.entity';
-import { VoiceRecordUpdateEntity } from './entities/voice-record-update.entity';
 import {
   RECORD_MEMO_MAX_LENGTH,
   RECORD_VOICE_FILE_FIELD_NAME,
@@ -224,7 +223,7 @@ export class RecordController {
   @ApiBody({ type: UpdateVoiceRecordDto })
   @ApiOkResponse({
     description: '음성 기록 수정 성공',
-    type: VoiceRecordUpdateEntity,
+    type: VoiceRecordDetailEntity,
   })
   @ApiBadRequestResponse({
     description: '요청 body 검증 실패 또는 연결할 인물을 찾을 수 없음',

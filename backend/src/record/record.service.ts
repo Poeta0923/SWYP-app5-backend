@@ -351,7 +351,7 @@ export class RecordService {
     userId: string,
     recordId: string,
     item: UpdateVoiceRecordDto,
-  ): Promise<VoiceRecordUpdateResponse> {
+  ): Promise<VoiceRecordDetailResponse> {
     if (
       !this.hasOwn(item, 'title') &&
       !this.hasOwn(item, 'recordMemo') &&
@@ -454,10 +454,24 @@ export class RecordService {
         select: {
           id: true,
           title: true,
-          updatedAt: true,
+          createdAt: true,
+          content: true,
+          keywords: {
+            select: {
+              name: true,
+            },
+            orderBy: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
           recordMemo: {
             select: {
               content: true,
+            },
+          },
+          voiceFile: {
+            select: {
+              s3Key: true,
             },
           },
           people: {
@@ -466,6 +480,11 @@ export class RecordService {
                 select: {
                   id: true,
                   name: true,
+                  profileImageFile: {
+                    select: {
+                      s3Key: true,
+                    },
+                  },
                 },
               },
             },
@@ -490,12 +509,16 @@ export class RecordService {
     return {
       recordId: updatedRecord.id,
       title: updatedRecord.title,
-      recordMemo: updatedRecord.recordMemo?.content ?? null,
-      people: updatedRecord.people.map(({ person }) => ({
+      createdAt: updatedRecord.createdAt.toISOString(),
+      recordPeople: updatedRecord.people.map(({ person }) => ({
         id: person.id,
         name: person.name,
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
       })),
-      updatedAt: updatedRecord.updatedAt.toISOString(),
+      recordKeywords: updatedRecord.keywords.map((keyword) => keyword.name),
+      content: updatedRecord.content ?? '',
+      recordMemo: updatedRecord.recordMemo?.content ?? null,
+      voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
     };
   }
 
