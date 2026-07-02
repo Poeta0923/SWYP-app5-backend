@@ -37,6 +37,23 @@ export interface VoiceRecordSummaryResponse {
   recordMemo: string;
 }
 
+export interface VoiceRecordDetailPersonResponse {
+  id: string;
+  name: string;
+  image: string | null;
+}
+
+export interface VoiceRecordDetailResponse {
+  recordId: string;
+  title: string;
+  createdAt: string;
+  recordPeople: VoiceRecordDetailPersonResponse[];
+  recordKeywords: string[];
+  content: string;
+  recordMemo: string | null;
+  voiceFileUrl: string | null;
+}
+
 export interface VoiceRecordPersonResponse {
   id: string;
   name: string;
@@ -152,6 +169,86 @@ export class RecordService {
     }
   }
 
+  async getVoiceRecord(
+    userId: string,
+    recordId: string,
+  ): Promise<VoiceRecordDetailResponse> {
+    const record = await this.prisma.record.findFirst({
+      where: {
+        id: recordId,
+        userId,
+        type: RecordType.VOICE,
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        content: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                profileImageFile: {
+                  select: {
+                    s3Key: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+        keywords: {
+          select: {
+            name: true,
+          },
+          orderBy: {
+            name: Prisma.SortOrder.asc,
+          },
+        },
+        recordMemo: {
+          select: {
+            content: true,
+          },
+        },
+        voiceFile: {
+          select: {
+            s3Key: true,
+          },
+        },
+      },
+    });
+
+    if (!record) {
+      throw new NotFoundException({
+        code: 'VOICE_RECORD_NOT_FOUND',
+        message: '음성 기록을 찾을 수 없습니다.',
+        recordId,
+      });
+    }
+
+    return {
+      recordId: record.id,
+      title: record.title,
+      createdAt: record.createdAt.toISOString(),
+      recordPeople: record.people.map(({ person }) => ({
+        id: person.id,
+        name: person.name,
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      })),
+      recordKeywords: record.keywords.map((keyword) => keyword.name),
+      content: record.content ?? '',
+      recordMemo: record.recordMemo?.content ?? null,
+      voiceFileUrl: this.toSignedMediaFileUrl(record.voiceFile),
+    };
+  }
+
   async summarizeVoiceRecord(
     userId: string,
     recordId: string,
@@ -245,9 +342,7 @@ export class RecordService {
       createdAt: updatedRecord.createdAt.toISOString(),
       keyword: updatedRecord.keywords.map((keyword) => keyword.name),
       content: updatedRecord.content ?? '',
-      voiceFileUrl: updatedRecord.voiceFile
-        ? this.s3Service.getSignedUrl(updatedRecord.voiceFile.s3Key)
-        : null,
+      voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
       recordMemo: updatedRecord.recordMemo?.content ?? '',
     };
   }
@@ -452,6 +547,12 @@ export class RecordService {
 
   private padTimeUnit(value: number): string {
     return value.toString().padStart(2, '0');
+  }
+
+  private toSignedMediaFileUrl(
+    mediaFile: { s3Key: string } | null,
+  ): string | null {
+    return mediaFile ? this.s3Service.getSignedUrl(mediaFile.s3Key) : null;
   }
 
   private async findVoiceRecordForUpdateOrThrow(

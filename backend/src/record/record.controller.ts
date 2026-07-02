@@ -32,6 +32,7 @@ import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { HomeRecordEntity } from '../home/entities/home.entity';
 import { CreateVoiceRecordSttMultipartDto } from './dto/create-voice-record-stt-multipart.dto';
 import { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
+import { VoiceRecordDetailEntity } from './entities/voice-record-detail.entity';
 import { VoiceRecordSummaryEntity } from './entities/voice-record-summary.entity';
 import { VoiceRecordSttEntity } from './entities/voice-record-stt.entity';
 import { VoiceRecordUpdateEntity } from './entities/voice-record-update.entity';
@@ -148,6 +149,34 @@ export class RecordController {
       voiceFile,
       trimmedRecordMemo,
     );
+  }
+
+  @Get('voice/:recordId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '음성 기록 상세 조회',
+    description:
+      '음성 기록의 제목, 생성 시각, 연결 인물, 키워드, 내용, 메모, 녹음 파일 signed URL을 조회합니다.',
+  })
+  @ApiOkResponse({
+    description: '음성 기록 상세 조회 성공',
+    type: VoiceRecordDetailEntity,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '음성 기록을 찾을 수 없음',
+  })
+  getVoiceRecord(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.recordService.getVoiceRecord(currentUser.sub, recordId);
   }
 
   @Get('voice/summary/:recordId')

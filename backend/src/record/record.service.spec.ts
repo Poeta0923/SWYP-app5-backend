@@ -28,6 +28,9 @@ interface PrismaMock {
 
 describe('RecordService', () => {
   let prisma: PrismaMock;
+  let s3Service: {
+    getSignedUrl: jest.Mock;
+  };
   let service: RecordService;
 
   beforeEach(() => {
@@ -52,9 +55,14 @@ describe('RecordService', () => {
         createMany: jest.fn(),
       },
     };
+    s3Service = {
+      getSignedUrl: jest.fn(
+        (key: string) => `https://signed.example.com/${key}`,
+      ),
+    };
     service = new RecordService(
       prisma as unknown as PrismaService,
-      {} as S3Service,
+      s3Service as unknown as S3Service,
       {} as OpenAITranscriptionService,
       {} as OpenAISummaryService,
     );
@@ -135,6 +143,132 @@ describe('RecordService', () => {
       },
       orderBy: { createdAt: Prisma.SortOrder.desc },
     });
+  });
+
+  it('returns voice record details with signed profile and voice URLs', async () => {
+    prisma.record.findFirst.mockResolvedValue({
+      id: 'record-1',
+      title: '통화 녹음',
+      createdAt: new Date('2026-07-02T01:00:00.000Z'),
+      content: '회의 내용 전문',
+      people: [
+        {
+          person: {
+            id: 'person-2',
+            name: '김영희',
+            profileImageFile: null,
+          },
+        },
+        {
+          person: {
+            id: 'person-1',
+            name: '홍길동',
+            profileImageFile: {
+              s3Key: 'people/user-1/profiles/profile.png',
+            },
+          },
+        },
+      ],
+      keywords: [{ name: '미팅' }, { name: '후속 액션' }],
+      recordMemo: {
+        content: '요약해 주세요',
+      },
+      voiceFile: {
+        s3Key: 'records/user-1/voice/recording.m4a',
+      },
+    });
+
+    await expect(service.getVoiceRecord('user-1', 'record-1')).resolves.toEqual(
+      {
+        recordId: 'record-1',
+        title: '통화 녹음',
+        createdAt: '2026-07-02T01:00:00.000Z',
+        recordPeople: [
+          {
+            id: 'person-2',
+            name: '김영희',
+            image: null,
+          },
+          {
+            id: 'person-1',
+            name: '홍길동',
+            image:
+              'https://signed.example.com/people/user-1/profiles/profile.png',
+          },
+        ],
+        recordKeywords: ['미팅', '후속 액션'],
+        content: '회의 내용 전문',
+        recordMemo: '요약해 주세요',
+        voiceFileUrl:
+          'https://signed.example.com/records/user-1/voice/recording.m4a',
+      },
+    );
+
+    expect(prisma.record.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+        type: RecordType.VOICE,
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        content: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                profileImageFile: {
+                  select: {
+                    s3Key: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+        keywords: {
+          select: {
+            name: true,
+          },
+          orderBy: {
+            name: Prisma.SortOrder.asc,
+          },
+        },
+        recordMemo: {
+          select: {
+            content: true,
+          },
+        },
+        voiceFile: {
+          select: {
+            s3Key: true,
+          },
+        },
+      },
+    });
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
+      'people/user-1/profiles/profile.png',
+    );
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
+      'records/user-1/voice/recording.m4a',
+    );
+  });
+
+  it('throws not found when the voice record detail does not exist for the user', async () => {
+    prisma.record.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.getVoiceRecord('user-1', 'record-missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('updates a voice record title, memo, and replaces connected people', async () => {

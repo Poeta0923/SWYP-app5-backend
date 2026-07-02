@@ -14,6 +14,7 @@ import { RecordService } from './record.service';
 describe('RecordController', () => {
   let recordService: {
     getRecords: jest.Mock;
+    getVoiceRecord: jest.Mock;
     updateVoiceRecord: jest.Mock;
   };
   let controller: RecordController;
@@ -21,6 +22,7 @@ describe('RecordController', () => {
   beforeEach(() => {
     recordService = {
       getRecords: jest.fn().mockResolvedValue([]),
+      getVoiceRecord: jest.fn().mockResolvedValue({}),
       updateVoiceRecord: jest.fn().mockResolvedValue({}),
     };
     controller = new RecordController(
@@ -51,6 +53,36 @@ describe('RecordController', () => {
       RequiredAgreementsGuard,
     ]);
     expect(recordService.getRecords).toHaveBeenCalledWith('user-1');
+  });
+
+  it('registers GET /record/voice/:recordId behind auth and required agreements guards', async () => {
+    const getVoiceRecordHandler = Object.getOwnPropertyDescriptor(
+      RecordController.prototype,
+      'getVoiceRecord',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(
+      controller.getVoiceRecord(currentUser, 'record-1'),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, getVoiceRecordHandler)).toBe(
+      'voice/:recordId',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, getVoiceRecordHandler)).toBe(
+      RequestMethod.GET,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, getVoiceRecordHandler)).toEqual(
+      [JwtAuthGuard, RequiredAgreementsGuard],
+    );
+    expect(recordService.getVoiceRecord).toHaveBeenCalledWith(
+      'user-1',
+      'record-1',
+    );
   });
 
   it('registers PATCH /record/voice/:recordId behind auth and required agreements guards', async () => {
