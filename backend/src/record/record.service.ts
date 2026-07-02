@@ -32,6 +32,7 @@ export interface VoiceRecordSummaryResponse {
   createdAt: string;
   keyword: string[];
   content: string;
+  voiceFileUrl: string | null;
   recordMemo: string;
 }
 
@@ -215,6 +216,11 @@ export class RecordService {
               content: true,
             },
           },
+          voiceFile: {
+            select: {
+              s3Key: true,
+            },
+          },
         },
       });
     });
@@ -225,6 +231,9 @@ export class RecordService {
       createdAt: updatedRecord.createdAt.toISOString(),
       keyword: updatedRecord.keywords.map((keyword) => keyword.name),
       content: updatedRecord.content ?? '',
+      voiceFileUrl: updatedRecord.voiceFile
+        ? this.s3Service.getSignedUrl(updatedRecord.voiceFile.s3Key)
+        : null,
       recordMemo: updatedRecord.recordMemo?.content ?? '',
     };
   }
