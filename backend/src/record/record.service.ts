@@ -6,8 +6,10 @@ import {
 import {
   MediaFileType,
   MediaFileUsage,
+  Prisma,
   RecordType,
 } from '../../generated/prisma/client';
+import type { HomeRecordResponse } from '../home/home.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service, type UploadedS3File } from '../s3/s3.service';
 import { OpenAISummaryService } from './openai-summary.service';
@@ -45,6 +47,46 @@ export class RecordService {
     private readonly openAITranscriptionService: OpenAITranscriptionService,
     private readonly openAISummaryService: OpenAISummaryService,
   ) {}
+
+  async getRecords(userId: string): Promise<HomeRecordResponse[]> {
+    const records = await this.prisma.record.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        createdAt: true,
+        voiceDurationSeconds: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: Prisma.SortOrder.desc },
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      type: record.type,
+      title: record.title,
+      people: record.people.map(({ person }) => person.name),
+      createdAt: record.createdAt.toISOString(),
+      voiceDuration:
+        record.type === RecordType.VOICE
+          ? this.toMinuteSecond(record.voiceDurationSeconds)
+          : null,
+    }));
+  }
 
   async createVoiceRecordFromStt(
     userId: string,
@@ -220,6 +262,21 @@ export class RecordService {
       sizeBytes: file.size,
       originalName: file.originalName,
     };
+  }
+
+  private toMinuteSecond(seconds: number | null): string | null {
+    if (seconds === null) {
+      return null;
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    return `${this.padTimeUnit(minutes)}:${this.padTimeUnit(remainingSeconds)}`;
+  }
+
+  private padTimeUnit(value: number): string {
+    return value.toString().padStart(2, '0');
   }
 
   private async deleteUploadedFiles(keys: string[]): Promise<void> {

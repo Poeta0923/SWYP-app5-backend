@@ -28,6 +28,7 @@ import { RequiredAgreementsGuard } from '../agreements/required-agreements.guard
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
+import { HomeRecordEntity } from '../home/entities/home.entity';
 import { CreateVoiceRecordSttMultipartDto } from './dto/create-voice-record-stt-multipart.dto';
 import { VoiceRecordSummaryEntity } from './entities/voice-record-summary.entity';
 import { VoiceRecordSttEntity } from './entities/voice-record-stt.entity';
@@ -50,6 +51,29 @@ const RECORD_VOICE_FILE_CONTENT_TYPES = new Set([
 @Controller('record')
 export class RecordController {
   constructor(private readonly recordService: RecordService) {}
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '기록 목록 조회',
+    description:
+      '현재 사용자의 전체 기록 목록을 생성 시각 내림차순으로 조회합니다.',
+  })
+  @ApiOkResponse({
+    description: '기록 목록 조회 성공',
+    type: HomeRecordEntity,
+    isArray: true,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  getRecords(@CurrentUser() currentUser: JwtAccessPayload) {
+    return this.recordService.getRecords(currentUser.sub);
+  }
 
   @Post('voice/stt')
   @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
