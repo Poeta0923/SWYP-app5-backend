@@ -34,7 +34,7 @@ export interface VoiceRecordSummaryResponse {
   keyword: string[];
   content: string;
   voiceFileUrl: string | null;
-  recordMemo: string;
+  recordMemo: string | null;
 }
 
 export interface VoiceRecordDetailPersonResponse {
@@ -123,7 +123,7 @@ export class RecordService {
   async createVoiceRecordFromStt(
     userId: string,
     file: VoiceRecordFile,
-    recordMemo: string,
+    recordMemo: string | null,
   ): Promise<VoiceRecordSttResponse> {
     const uploadedFileKeys: string[] = [];
 
@@ -149,13 +149,15 @@ export class RecordService {
           },
         });
 
-        await tx.recordMemo.create({
-          data: {
-            userId,
-            recordId: record.id,
-            content: recordMemo.trim(),
-          },
-        });
+        if (recordMemo) {
+          await tx.recordMemo.create({
+            data: {
+              userId,
+              recordId: record.id,
+              content: recordMemo,
+            },
+          });
+        }
 
         return record.id;
       });
@@ -343,7 +345,7 @@ export class RecordService {
       keyword: updatedRecord.keywords.map((keyword) => keyword.name),
       content: updatedRecord.content ?? '',
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
-      recordMemo: updatedRecord.recordMemo?.content ?? '',
+      recordMemo: updatedRecord.recordMemo?.content ?? null,
     };
   }
 

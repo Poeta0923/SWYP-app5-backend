@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { RECORD_MEMO_MAX_LENGTH } from '../record.constants';
 
 export class CreateVoiceRecordSttMultipartDto {
@@ -10,13 +10,14 @@ export class CreateVoiceRecordSttMultipartDto {
   })
   voiceFile!: unknown;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '미팅에서 나온 후속 액션을 정리해 주세요.',
-    description: `음성 기록에 함께 저장할 메모. 최대 ${RECORD_MEMO_MAX_LENGTH}자`,
+    description: `음성 기록에 함께 저장할 메모. 생략 가능하며 최대 ${RECORD_MEMO_MAX_LENGTH}자`,
     maxLength: RECORD_MEMO_MAX_LENGTH,
+    nullable: true,
   })
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(RECORD_MEMO_MAX_LENGTH)
-  recordMemo!: string;
+  recordMemo?: string | null;
 }
