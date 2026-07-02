@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
+  Param,
   Post,
   UploadedFile,
   UseGuards,
@@ -16,6 +18,8 @@ import {
   ApiConsumes,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -25,6 +29,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { CreateVoiceRecordSttMultipartDto } from './dto/create-voice-record-stt-multipart.dto';
+import { VoiceRecordSummaryEntity } from './entities/voice-record-summary.entity';
 import { VoiceRecordSttEntity } from './entities/voice-record-stt.entity';
 import {
   RECORD_MEMO_MAX_LENGTH,
@@ -116,6 +121,40 @@ export class RecordController {
       voiceFile,
       trimmedRecordMemo,
     );
+  }
+
+  @Get('voice/summary/:recordId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '음성 기록 내용 요약',
+    description:
+      '음성 기록 content를 OpenAI API로 요약하고, 요약 결과로 기존 content를 덮어씁니다.',
+  })
+  @ApiOkResponse({
+    description: '음성 기록 요약 성공',
+    type: VoiceRecordSummaryEntity,
+  })
+  @ApiBadRequestResponse({
+    description: '요약할 content가 비어 있음',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '음성 기록을 찾을 수 없음',
+  })
+  @ApiBadGatewayResponse({
+    description: 'OpenAI 요약 처리 실패',
+  })
+  summarizeVoiceRecord(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.recordService.summarizeVoiceRecord(currentUser.sub, recordId);
   }
 }
 
