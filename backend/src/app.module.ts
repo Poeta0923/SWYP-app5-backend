@@ -12,6 +12,7 @@ import { PeopleModule } from './people/people.module';
 import { S3Module } from './s3/s3.module';
 import { HomeModule } from './home/home.module';
 import { UsersModule } from './users/users.module';
+import { RecordModule } from './record/record.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module';
     S3Module,
     HomeModule,
     UsersModule,
+    RecordModule,
   ],
   controllers: [AppController],
   providers: [AppService],
