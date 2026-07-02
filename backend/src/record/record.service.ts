@@ -25,7 +25,12 @@ export interface VoiceRecordSttResponse {
 }
 
 export interface VoiceRecordSummaryResponse {
-  id: string;
+  recordId: string;
+  title: string;
+  createdAt: string;
+  keyword: string[];
+  content: string;
+  recordMemo: string;
 }
 
 interface UploadedVoiceStorageFile extends UploadedS3File {
@@ -124,19 +129,61 @@ export class RecordService {
       });
     }
 
-    const summary = await this.openAISummaryService.summarize(content);
+    const summaryResult = await this.openAISummaryService.summarize(content);
 
-    await this.prisma.record.update({
-      where: {
-        id: record.id,
-      },
-      data: {
-        content: summary,
-      },
+    const updatedRecord = await this.prisma.$transaction(async (tx) => {
+      await tx.recordKeyword.deleteMany({
+        where: {
+          recordId: record.id,
+          userId,
+        },
+      });
+
+      await tx.recordKeyword.createMany({
+        data: summaryResult.keywords.map((keyword) => ({
+          userId,
+          recordId: record.id,
+          name: keyword,
+        })),
+        skipDuplicates: true,
+      });
+
+      return tx.record.update({
+        where: {
+          id: record.id,
+        },
+        data: {
+          content: summaryResult.summary,
+        },
+        select: {
+          id: true,
+          title: true,
+          createdAt: true,
+          content: true,
+          keywords: {
+            select: {
+              name: true,
+            },
+            orderBy: {
+              name: 'asc',
+            },
+          },
+          recordMemo: {
+            select: {
+              content: true,
+            },
+          },
+        },
+      });
     });
 
     return {
-      id: record.id,
+      recordId: updatedRecord.id,
+      title: updatedRecord.title,
+      createdAt: updatedRecord.createdAt.toISOString(),
+      keyword: updatedRecord.keywords.map((keyword) => keyword.name),
+      content: updatedRecord.content ?? '',
+      recordMemo: updatedRecord.recordMemo?.content ?? '',
     };
   }
 
