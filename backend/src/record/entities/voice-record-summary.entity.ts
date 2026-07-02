@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { VoiceRecordSummaryResponse } from '../record.service';
 
 export class VoiceRecordSummaryEntity implements VoiceRecordSummaryResponse {
@@ -41,9 +41,10 @@ export class VoiceRecordSummaryEntity implements VoiceRecordSummaryResponse {
   })
   voiceFileUrl: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '미팅에서 나온 후속 액션을 정리해 주세요.',
     description: '기록 메모',
+    nullable: true,
   })
-  recordMemo: string;
+  recordMemo: string | null;
 }

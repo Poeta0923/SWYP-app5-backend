@@ -133,11 +133,10 @@ export class RecordController {
 
     const trimmedRecordMemo = recordMemo?.trim();
 
-    if (!trimmedRecordMemo) {
-      throw new BadRequestException('recordMemo is required.');
-    }
-
-    if (trimmedRecordMemo.length > RECORD_MEMO_MAX_LENGTH) {
+    if (
+      trimmedRecordMemo &&
+      trimmedRecordMemo.length > RECORD_MEMO_MAX_LENGTH
+    ) {
       throw new BadRequestException(
         `recordMemo must be shorter than or equal to ${RECORD_MEMO_MAX_LENGTH} characters.`,
       );
@@ -146,7 +145,7 @@ export class RecordController {
     return this.recordService.createVoiceRecordFromStt(
       currentUser.sub,
       voiceFile,
-      trimmedRecordMemo,
+      trimmedRecordMemo || null,
     );
   }
 
