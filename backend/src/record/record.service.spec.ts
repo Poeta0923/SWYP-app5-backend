@@ -12,6 +12,7 @@ interface PrismaMock {
     findMany: jest.Mock;
   };
   record: {
+    create: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
     update: jest.Mock;
@@ -49,6 +50,7 @@ describe('RecordService', () => {
         findMany: jest.fn(),
       },
       record: {
+        create: jest.fn(),
         findMany: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
@@ -157,6 +159,559 @@ describe('RecordService', () => {
       },
       orderBy: { createdAt: Prisma.SortOrder.desc },
     });
+  });
+
+  it('creates a text record and returns connected people with signed profile URLs', async () => {
+    prisma.person.findMany.mockResolvedValue([
+      { id: 'person-1' },
+      { id: 'person-2' },
+    ]);
+    prisma.record.create.mockResolvedValue({
+      id: 'record-1',
+    });
+    prisma.recordPerson.createMany.mockResolvedValue({ count: 2 });
+    prisma.record.findFirst.mockResolvedValue({
+      id: 'record-1',
+      title: '미팅 기록',
+      createdAt: new Date('2026-07-02T01:00:00.000Z'),
+      content: '회의 내용',
+      people: [
+        {
+          person: {
+            id: 'person-2',
+            name: '김영희',
+            profileImageFile: null,
+          },
+        },
+        {
+          person: {
+            id: 'person-1',
+            name: '홍길동',
+            profileImageFile: {
+              s3Key: 'people/user-1/profiles/profile.png',
+            },
+          },
+        },
+      ],
+    });
+
+    await expect(
+      service.createTextRecord('user-1', {
+        title: '미팅 기록',
+        content: '회의 내용',
+        peopleIds: ['person-1', 'person-2'],
+      }),
+    ).resolves.toEqual({
+      recordId: 'record-1',
+      title: '미팅 기록',
+      createdAt: '2026-07-02T01:00:00.000Z',
+      content: '회의 내용',
+      people: [
+        {
+          id: 'person-2',
+          name: '김영희',
+          image: null,
+        },
+        {
+          id: 'person-1',
+          name: '홍길동',
+          image:
+            'https://signed.example.com/people/user-1/profiles/profile.png',
+        },
+      ],
+    });
+
+    expect(prisma.person.findMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['person-1', 'person-2'],
+        },
+        userId: 'user-1',
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.record.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        type: RecordType.TEXT,
+        title: '미팅 기록',
+        content: '회의 내용',
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.recordPerson.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          userId: 'user-1',
+          recordId: 'record-1',
+          personId: 'person-1',
+        },
+        {
+          userId: 'user-1',
+          recordId: 'record-1',
+          personId: 'person-2',
+        },
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.record.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+        type: RecordType.TEXT,
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        content: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                profileImageFile: {
+                  select: {
+                    s3Key: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+      },
+    });
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
+      'people/user-1/profiles/profile.png',
+    );
+  });
+
+  it('rejects unknown people when creating a text record', async () => {
+    prisma.person.findMany.mockResolvedValue([{ id: 'person-1' }]);
+
+    await expect(
+      service.createTextRecord('user-1', {
+        title: '미팅 기록',
+        content: '회의 내용',
+        peopleIds: ['person-1', 'person-missing'],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.record.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('returns text record details with linked schedule and signed profile URLs', async () => {
+    prisma.record.findFirst.mockResolvedValue({
+      id: 'record-1',
+      title: '미팅 기록',
+      createdAt: new Date('2026-07-02T01:00:00.000Z'),
+      content: '회의 내용',
+      people: [
+        {
+          person: {
+            id: 'person-2',
+            name: '김영희',
+            profileImageFile: null,
+          },
+        },
+        {
+          person: {
+            id: 'person-1',
+            name: '홍길동',
+            profileImageFile: {
+              s3Key: 'people/user-1/profiles/profile.png',
+            },
+          },
+        },
+      ],
+      schedule: {
+        id: 'schedule-1',
+        title: '후속 미팅',
+        scheduleTime: new Date('2000-01-01T03:00:00.000Z'),
+        people: [
+          {
+            person: {
+              id: 'person-3',
+              name: '이철수',
+              profileImageFile: {
+                s3Key: 'people/user-1/profiles/schedule-profile.png',
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    await expect(service.getTextRecord('user-1', 'record-1')).resolves.toEqual({
+      recordId: 'record-1',
+      title: '미팅 기록',
+      createdAt: '2026-07-02T01:00:00.000Z',
+      content: '회의 내용',
+      people: [
+        {
+          id: 'person-2',
+          name: '김영희',
+          image: null,
+        },
+        {
+          id: 'person-1',
+          name: '홍길동',
+          image:
+            'https://signed.example.com/people/user-1/profiles/profile.png',
+        },
+      ],
+      schedule: {
+        scheduleId: 'schedule-1',
+        title: '후속 미팅',
+        scheduleTime: '2000-01-01T03:00:00.000Z',
+        dDay: 'D-0',
+        people: [
+          {
+            id: 'person-3',
+            name: '이철수',
+            image:
+              'https://signed.example.com/people/user-1/profiles/schedule-profile.png',
+          },
+        ],
+      },
+    });
+
+    expect(prisma.record.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+        type: RecordType.TEXT,
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        content: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                profileImageFile: {
+                  select: {
+                    s3Key: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+        schedule: {
+          select: {
+            id: true,
+            title: true,
+            scheduleTime: true,
+            people: {
+              select: {
+                person: {
+                  select: {
+                    id: true,
+                    name: true,
+                    profileImageFile: {
+                      select: {
+                        s3Key: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                person: {
+                  name: Prisma.SortOrder.asc,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
+      'people/user-1/profiles/profile.png',
+    );
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
+      'people/user-1/profiles/schedule-profile.png',
+    );
+  });
+
+  it('throws not found when the text record detail does not exist for the user', async () => {
+    prisma.record.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.getTextRecord('user-1', 'record-missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('updates a text record title, content, and replaces connected people', async () => {
+    prisma.record.findFirst
+      .mockResolvedValueOnce({ id: 'record-1' })
+      .mockResolvedValueOnce({
+        id: 'record-1',
+        title: '수정된 미팅 기록',
+        createdAt: new Date('2026-07-02T01:00:00.000Z'),
+        content: '수정된 회의 내용',
+        people: [
+          {
+            person: {
+              id: 'person-2',
+              name: '김영희',
+              profileImageFile: null,
+            },
+          },
+          {
+            person: {
+              id: 'person-1',
+              name: '홍길동',
+              profileImageFile: {
+                s3Key: 'people/user-1/profiles/profile.png',
+              },
+            },
+          },
+        ],
+        schedule: null,
+      });
+    prisma.person.findMany.mockResolvedValue([
+      { id: 'person-1' },
+      { id: 'person-2' },
+    ]);
+    prisma.record.update.mockResolvedValue({});
+    prisma.recordPerson.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.recordPerson.createMany.mockResolvedValue({ count: 2 });
+
+    await expect(
+      service.updateTextRecord('user-1', 'record-1', {
+        title: '수정된 미팅 기록',
+        content: '수정된 회의 내용',
+        personIds: ['person-1', 'person-2'],
+      }),
+    ).resolves.toEqual({
+      recordId: 'record-1',
+      title: '수정된 미팅 기록',
+      createdAt: '2026-07-02T01:00:00.000Z',
+      content: '수정된 회의 내용',
+      people: [
+        {
+          id: 'person-2',
+          name: '김영희',
+          image: null,
+        },
+        {
+          id: 'person-1',
+          name: '홍길동',
+          image:
+            'https://signed.example.com/people/user-1/profiles/profile.png',
+        },
+      ],
+      schedule: null,
+    });
+
+    expect(prisma.record.findFirst).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+        type: RecordType.TEXT,
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.person.findMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['person-1', 'person-2'],
+        },
+        userId: 'user-1',
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.record.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'record-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        updatedAt: expect.any(Date) as Date,
+        title: '수정된 미팅 기록',
+        content: '수정된 회의 내용',
+      },
+    });
+    expect(prisma.recordPerson.deleteMany).toHaveBeenCalledWith({
+      where: {
+        recordId: 'record-1',
+        userId: 'user-1',
+      },
+    });
+    expect(prisma.recordPerson.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          recordId: 'record-1',
+          personId: 'person-1',
+          userId: 'user-1',
+        },
+        {
+          recordId: 'record-1',
+          personId: 'person-2',
+          userId: 'user-1',
+        },
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.record.findFirst).toHaveBeenNthCalledWith(2, {
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+        type: RecordType.TEXT,
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        content: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                profileImageFile: {
+                  select: {
+                    s3Key: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+        schedule: {
+          select: {
+            id: true,
+            title: true,
+            scheduleTime: true,
+            people: {
+              select: {
+                person: {
+                  select: {
+                    id: true,
+                    name: true,
+                    profileImageFile: {
+                      select: {
+                        s3Key: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                person: {
+                  name: Prisma.SortOrder.asc,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('deletes all connected people when empty personIds are provided for a text record', async () => {
+    prisma.record.findFirst
+      .mockResolvedValueOnce({ id: 'record-1' })
+      .mockResolvedValueOnce({
+        id: 'record-1',
+        title: '미팅 기록',
+        createdAt: new Date('2026-07-02T01:00:00.000Z'),
+        content: '회의 내용',
+        people: [],
+        schedule: null,
+      });
+    prisma.record.update.mockResolvedValue({});
+    prisma.recordPerson.deleteMany.mockResolvedValue({ count: 2 });
+
+    await expect(
+      service.updateTextRecord('user-1', 'record-1', {
+        personIds: [],
+      }),
+    ).resolves.toEqual({
+      recordId: 'record-1',
+      title: '미팅 기록',
+      createdAt: '2026-07-02T01:00:00.000Z',
+      content: '회의 내용',
+      people: [],
+      schedule: null,
+    });
+
+    expect(prisma.person.findMany).not.toHaveBeenCalled();
+    expect(prisma.recordPerson.deleteMany).toHaveBeenCalledWith({
+      where: {
+        recordId: 'record-1',
+        userId: 'user-1',
+      },
+    });
+    expect(prisma.recordPerson.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects text record updates when no editable fields are provided', async () => {
+    await expect(
+      service.updateTextRecord('user-1', 'record-1', {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.record.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('throws not found when the text record does not exist for the user', async () => {
+    prisma.record.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updateTextRecord('user-1', 'record-missing', {
+        title: '미팅 기록',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown person IDs before replacing text record people', async () => {
+    prisma.record.findFirst.mockResolvedValue({ id: 'record-1' });
+    prisma.person.findMany.mockResolvedValue([{ id: 'person-1' }]);
+
+    await expect(
+      service.updateTextRecord('user-1', 'record-1', {
+        personIds: ['person-1', 'person-missing'],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('returns voice record details with signed profile and voice URLs', async () => {
