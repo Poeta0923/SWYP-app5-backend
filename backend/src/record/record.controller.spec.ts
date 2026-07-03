@@ -21,6 +21,7 @@ describe('RecordController', () => {
     updateTextRecord: jest.Mock;
     getVoiceRecord: jest.Mock;
     updateVoiceRecord: jest.Mock;
+    deleteRecord: jest.Mock;
   };
   let controller: RecordController;
 
@@ -32,6 +33,7 @@ describe('RecordController', () => {
       updateTextRecord: jest.fn().mockResolvedValue({}),
       getVoiceRecord: jest.fn().mockResolvedValue({}),
       updateVoiceRecord: jest.fn().mockResolvedValue({}),
+      deleteRecord: jest.fn().mockResolvedValue({ success: true }),
     };
     controller = new RecordController(
       recordService as unknown as RecordService,
@@ -237,6 +239,37 @@ describe('RecordController', () => {
         recordMemo: '다시 볼 것',
         personIds: ['person-1', 'person-2'],
       },
+    );
+  });
+
+  it('registers DELETE /record/:recordId behind auth and required agreements guards', async () => {
+    const deleteRecordHandler = Object.getOwnPropertyDescriptor(
+      RecordController.prototype,
+      'deleteRecord',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(
+      controller.deleteRecord(currentUser, 'record-1'),
+    ).resolves.toEqual({ success: true });
+
+    expect(Reflect.getMetadata(PATH_METADATA, deleteRecordHandler)).toBe(
+      ':recordId',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, deleteRecordHandler)).toBe(
+      RequestMethod.DELETE,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, deleteRecordHandler)).toEqual([
+      JwtAuthGuard,
+      RequiredAgreementsGuard,
+    ]);
+    expect(recordService.deleteRecord).toHaveBeenCalledWith(
+      'user-1',
+      'record-1',
     );
   });
 });

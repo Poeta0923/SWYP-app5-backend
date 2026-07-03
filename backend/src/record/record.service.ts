@@ -105,6 +105,10 @@ export interface VoiceRecordUpdateResponse {
   updatedAt: string;
 }
 
+export interface DeleteRecordResult {
+  success: true;
+}
+
 interface UploadedVoiceStorageFile extends UploadedS3File {
   originalName?: string;
 }
@@ -986,6 +990,66 @@ export class RecordService {
         updatedRecord.schedule,
         new Date(),
       ),
+    };
+  }
+
+  async deleteRecord(
+    userId: string,
+    recordId: string,
+  ): Promise<DeleteRecordResult> {
+    let s3KeysToDelete: string[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      const record = await tx.record.findFirst({
+        where: {
+          id: recordId,
+          userId,
+        },
+        select: {
+          id: true,
+          type: true,
+          voiceFile: {
+            select: {
+              id: true,
+              s3Key: true,
+            },
+          },
+        },
+      });
+
+      if (!record) {
+        throw new NotFoundException({
+          code: 'RECORD_NOT_FOUND',
+          message: '기록을 찾을 수 없습니다.',
+          recordId,
+        });
+      }
+
+      if (record.type === RecordType.VOICE && record.voiceFile) {
+        s3KeysToDelete = [record.voiceFile.s3Key];
+
+        await tx.mediaFile.deleteMany({
+          where: {
+            id: record.voiceFile.id,
+            userId,
+          },
+        });
+      }
+
+      await tx.record.deleteMany({
+        where: {
+          id: record.id,
+          userId,
+        },
+      });
+    });
+
+    if (s3KeysToDelete.length > 0) {
+      await this.s3Service.deleteFiles(s3KeysToDelete);
+    }
+
+    return {
+      success: true,
     };
   }
 
