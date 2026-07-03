@@ -12,6 +12,8 @@ import {
 import type { HomeRecordResponse } from '../home/home.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service, type UploadedS3File } from '../s3/s3.service';
+import type { CreateTextRecordDto } from './dto/create-text-record.dto';
+import type { UpdateTextRecordDto } from './dto/update-text-record.dto';
 import type { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
 import { OpenAISummaryService } from './openai-summary.service';
 import { OpenAITranscriptionService } from './openai-transcription.service';
@@ -27,6 +29,24 @@ export interface VoiceRecordFile {
 
 export interface VoiceRecordSttResponse {
   id: string;
+}
+
+export interface TextRecordPersonResponse {
+  id: string;
+  name: string;
+  image: string | null;
+}
+
+export interface TextRecordCreateResponse {
+  recordId: string;
+  title: string;
+  createdAt: string;
+  content: string;
+  people: TextRecordPersonResponse[];
+}
+
+export interface TextRecordDetailResponse extends TextRecordCreateResponse {
+  schedule: VoiceRecordScheduleResponse | null;
 }
 
 export interface VoiceRecordSchedulePersonResponse {
@@ -200,6 +220,330 @@ export class RecordService {
       await this.deleteUploadedFiles(uploadedFileKeys);
       throw error;
     }
+  }
+
+  async createTextRecord(
+    userId: string,
+    item: CreateTextRecordDto,
+  ): Promise<TextRecordCreateResponse> {
+    await this.assertPeopleExist(userId, item.peopleIds);
+
+    const createdRecord = await this.prisma.$transaction(async (tx) => {
+      const record = await tx.record.create({
+        data: {
+          userId,
+          type: RecordType.TEXT,
+          title: item.title,
+          content: item.content,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (item.peopleIds.length > 0) {
+        await tx.recordPerson.createMany({
+          data: item.peopleIds.map((personId) => ({
+            userId,
+            recordId: record.id,
+            personId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return tx.record.findFirst({
+        where: {
+          id: record.id,
+          userId,
+          type: RecordType.TEXT,
+        },
+        select: {
+          id: true,
+          title: true,
+          createdAt: true,
+          content: true,
+          people: {
+            select: {
+              person: {
+                select: {
+                  id: true,
+                  name: true,
+                  profileImageFile: {
+                    select: {
+                      s3Key: true,
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: {
+              person: {
+                name: Prisma.SortOrder.asc,
+              },
+            },
+          },
+        },
+      });
+    });
+
+    if (!createdRecord) {
+      throw new NotFoundException({
+        code: 'TEXT_RECORD_NOT_FOUND',
+        message: '생성된 텍스트 기록을 찾을 수 없습니다.',
+      });
+    }
+
+    return {
+      recordId: createdRecord.id,
+      title: createdRecord.title,
+      createdAt: createdRecord.createdAt.toISOString(),
+      content: createdRecord.content ?? '',
+      people: createdRecord.people.map(({ person }) => ({
+        id: person.id,
+        name: person.name,
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      })),
+    };
+  }
+
+  async getTextRecord(
+    userId: string,
+    recordId: string,
+  ): Promise<TextRecordDetailResponse> {
+    const record = await this.prisma.record.findFirst({
+      where: {
+        id: recordId,
+        userId,
+        type: RecordType.TEXT,
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        content: true,
+        people: {
+          select: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                profileImageFile: {
+                  select: {
+                    s3Key: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            person: {
+              name: Prisma.SortOrder.asc,
+            },
+          },
+        },
+        schedule: {
+          select: {
+            id: true,
+            title: true,
+            scheduleTime: true,
+            people: {
+              select: {
+                person: {
+                  select: {
+                    id: true,
+                    name: true,
+                    profileImageFile: {
+                      select: {
+                        s3Key: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                person: {
+                  name: Prisma.SortOrder.asc,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!record) {
+      throw new NotFoundException({
+        code: 'TEXT_RECORD_NOT_FOUND',
+        message: '텍스트 기록을 찾을 수 없습니다.',
+        recordId,
+      });
+    }
+
+    return {
+      recordId: record.id,
+      title: record.title,
+      createdAt: record.createdAt.toISOString(),
+      content: record.content ?? '',
+      people: record.people.map(({ person }) => ({
+        id: person.id,
+        name: person.name,
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      })),
+      schedule: this.toVoiceRecordScheduleResponse(record.schedule, new Date()),
+    };
+  }
+
+  async updateTextRecord(
+    userId: string,
+    recordId: string,
+    item: UpdateTextRecordDto,
+  ): Promise<TextRecordDetailResponse> {
+    if (
+      !this.hasOwn(item, 'title') &&
+      !this.hasOwn(item, 'content') &&
+      !this.hasOwn(item, 'personIds')
+    ) {
+      throw new BadRequestException({
+        code: 'TEXT_RECORD_UPDATE_EMPTY',
+        message: '수정할 필드를 하나 이상 입력해 주세요.',
+      });
+    }
+
+    await this.findTextRecordForUpdateOrThrow(userId, recordId);
+
+    if (this.hasOwn(item, 'personIds')) {
+      await this.assertPeopleExist(userId, item.personIds ?? []);
+    }
+
+    const updatedRecord = await this.prisma.$transaction(async (tx) => {
+      const recordUpdateData: Prisma.RecordUpdateInput = {
+        updatedAt: new Date(),
+      };
+
+      if (this.hasOwn(item, 'title')) {
+        recordUpdateData.title = item.title;
+      }
+
+      if (this.hasOwn(item, 'content')) {
+        recordUpdateData.content = item.content;
+      }
+
+      await tx.record.update({
+        where: {
+          id_userId: {
+            id: recordId,
+            userId,
+          },
+        },
+        data: recordUpdateData,
+      });
+
+      if (this.hasOwn(item, 'personIds')) {
+        await tx.recordPerson.deleteMany({
+          where: {
+            recordId,
+            userId,
+          },
+        });
+
+        if (item.personIds && item.personIds.length > 0) {
+          await tx.recordPerson.createMany({
+            data: item.personIds.map((personId) => ({
+              recordId,
+              personId,
+              userId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      return tx.record.findFirst({
+        where: {
+          id: recordId,
+          userId,
+          type: RecordType.TEXT,
+        },
+        select: {
+          id: true,
+          title: true,
+          createdAt: true,
+          content: true,
+          people: {
+            select: {
+              person: {
+                select: {
+                  id: true,
+                  name: true,
+                  profileImageFile: {
+                    select: {
+                      s3Key: true,
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: {
+              person: {
+                name: Prisma.SortOrder.asc,
+              },
+            },
+          },
+          schedule: {
+            select: {
+              id: true,
+              title: true,
+              scheduleTime: true,
+              people: {
+                select: {
+                  person: {
+                    select: {
+                      id: true,
+                      name: true,
+                      profileImageFile: {
+                        select: {
+                          s3Key: true,
+                        },
+                      },
+                    },
+                  },
+                },
+                orderBy: {
+                  person: {
+                    name: Prisma.SortOrder.asc,
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    if (!updatedRecord) {
+      throw new NotFoundException({
+        code: 'TEXT_RECORD_NOT_FOUND',
+        message: '수정할 텍스트 기록을 찾을 수 없습니다.',
+        recordId,
+      });
+    }
+
+    return {
+      recordId: updatedRecord.id,
+      title: updatedRecord.title,
+      createdAt: updatedRecord.createdAt.toISOString(),
+      content: updatedRecord.content ?? '',
+      people: updatedRecord.people.map(({ person }) => ({
+        id: person.id,
+        name: person.name,
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      })),
+      schedule: this.toVoiceRecordScheduleResponse(
+        updatedRecord.schedule,
+        new Date(),
+      ),
+    };
   }
 
   async getVoiceRecord(
@@ -758,6 +1102,30 @@ export class RecordService {
       throw new NotFoundException({
         code: 'VOICE_RECORD_NOT_FOUND',
         message: '수정할 음성 기록을 찾을 수 없습니다.',
+        recordId,
+      });
+    }
+  }
+
+  private async findTextRecordForUpdateOrThrow(
+    userId: string,
+    recordId: string,
+  ): Promise<void> {
+    const record = await this.prisma.record.findFirst({
+      where: {
+        id: recordId,
+        userId,
+        type: RecordType.TEXT,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!record) {
+      throw new NotFoundException({
+        code: 'TEXT_RECORD_NOT_FOUND',
+        message: '수정할 텍스트 기록을 찾을 수 없습니다.',
         recordId,
       });
     }

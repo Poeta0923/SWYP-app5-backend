@@ -30,8 +30,14 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { HomeRecordEntity } from '../home/entities/home.entity';
+import { CreateTextRecordDto } from './dto/create-text-record.dto';
 import { CreateVoiceRecordSttMultipartDto } from './dto/create-voice-record-stt-multipart.dto';
+import { UpdateTextRecordDto } from './dto/update-text-record.dto';
 import { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
+import {
+  TextRecordDetailEntity,
+  TextRecordEntity,
+} from './entities/text-record.entity';
 import { VoiceRecordDetailEntity } from './entities/voice-record-detail.entity';
 import { VoiceRecordSummaryEntity } from './entities/voice-record-summary.entity';
 import { VoiceRecordSttEntity } from './entities/voice-record-stt.entity';
@@ -147,6 +153,95 @@ export class RecordController {
       voiceFile,
       trimmedRecordMemo || null,
     );
+  }
+
+  @Post('text')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '텍스트 기록 생성',
+    description: '제목, 내용, 연결 인물을 입력해 TEXT 타입 기록을 생성합니다.',
+  })
+  @ApiBody({ type: CreateTextRecordDto })
+  @ApiCreatedResponse({
+    description: '텍스트 기록 생성 성공',
+    type: TextRecordEntity,
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패 또는 연결할 인물을 찾을 수 없음',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  createTextRecord(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Body() dto: CreateTextRecordDto,
+  ) {
+    return this.recordService.createTextRecord(currentUser.sub, dto);
+  }
+
+  @Get('text/:recordId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '텍스트 기록 상세 조회',
+    description:
+      '텍스트 기록의 제목, 생성 시각, 내용, 연결 인물과 연결 일정 정보를 조회합니다.',
+  })
+  @ApiOkResponse({
+    description: '텍스트 기록 상세 조회 성공',
+    type: TextRecordDetailEntity,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '텍스트 기록을 찾을 수 없음',
+  })
+  getTextRecord(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.recordService.getTextRecord(currentUser.sub, recordId);
+  }
+
+  @Patch('text/:recordId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '텍스트 기록 수정',
+    description:
+      '텍스트 기록의 제목, 내용, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체하며, 연결 일정 정보도 함께 반환합니다.',
+  })
+  @ApiBody({ type: UpdateTextRecordDto })
+  @ApiOkResponse({
+    description: '텍스트 기록 수정 성공',
+    type: TextRecordDetailEntity,
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패 또는 연결할 인물을 찾을 수 없음',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '텍스트 기록을 찾을 수 없음',
+  })
+  updateTextRecord(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('recordId') recordId: string,
+    @Body() dto: UpdateTextRecordDto,
+  ) {
+    return this.recordService.updateTextRecord(currentUser.sub, recordId, dto);
   }
 
   @Get('voice/:recordId')

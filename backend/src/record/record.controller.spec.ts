@@ -7,6 +7,8 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { RequiredAgreementsGuard } from '../agreements/required-agreements.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CreateTextRecordDto } from './dto/create-text-record.dto';
+import { UpdateTextRecordDto } from './dto/update-text-record.dto';
 import { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
 import { RecordController } from './record.controller';
 import { RecordService } from './record.service';
@@ -14,6 +16,9 @@ import { RecordService } from './record.service';
 describe('RecordController', () => {
   let recordService: {
     getRecords: jest.Mock;
+    createTextRecord: jest.Mock;
+    getTextRecord: jest.Mock;
+    updateTextRecord: jest.Mock;
     getVoiceRecord: jest.Mock;
     updateVoiceRecord: jest.Mock;
   };
@@ -22,6 +27,9 @@ describe('RecordController', () => {
   beforeEach(() => {
     recordService = {
       getRecords: jest.fn().mockResolvedValue([]),
+      createTextRecord: jest.fn().mockResolvedValue({}),
+      getTextRecord: jest.fn().mockResolvedValue({}),
+      updateTextRecord: jest.fn().mockResolvedValue({}),
       getVoiceRecord: jest.fn().mockResolvedValue({}),
       updateVoiceRecord: jest.fn().mockResolvedValue({}),
     };
@@ -53,6 +61,113 @@ describe('RecordController', () => {
       RequiredAgreementsGuard,
     ]);
     expect(recordService.getRecords).toHaveBeenCalledWith('user-1');
+  });
+
+  it('registers POST /record/text behind auth and required agreements guards', async () => {
+    const createTextRecordHandler = Object.getOwnPropertyDescriptor(
+      RecordController.prototype,
+      'createTextRecord',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const dto = plainToInstance(CreateTextRecordDto, {
+      title: ' 미팅 기록 ',
+      content: ' 회의 내용 ',
+      peopleIds: ['person-1', 'person-2'],
+    });
+
+    await expect(
+      controller.createTextRecord(currentUser, dto),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, createTextRecordHandler)).toBe(
+      'text',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, createTextRecordHandler)).toBe(
+      RequestMethod.POST,
+    );
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, createTextRecordHandler),
+    ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
+    expect(recordService.createTextRecord).toHaveBeenCalledWith('user-1', {
+      title: '미팅 기록',
+      content: '회의 내용',
+      peopleIds: ['person-1', 'person-2'],
+    });
+  });
+
+  it('registers GET /record/text/:recordId behind auth and required agreements guards', async () => {
+    const getTextRecordHandler = Object.getOwnPropertyDescriptor(
+      RecordController.prototype,
+      'getTextRecord',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(
+      controller.getTextRecord(currentUser, 'record-1'),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, getTextRecordHandler)).toBe(
+      'text/:recordId',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, getTextRecordHandler)).toBe(
+      RequestMethod.GET,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, getTextRecordHandler)).toEqual([
+      JwtAuthGuard,
+      RequiredAgreementsGuard,
+    ]);
+    expect(recordService.getTextRecord).toHaveBeenCalledWith(
+      'user-1',
+      'record-1',
+    );
+  });
+
+  it('registers PATCH /record/text/:recordId behind auth and required agreements guards', async () => {
+    const updateTextRecordHandler = Object.getOwnPropertyDescriptor(
+      RecordController.prototype,
+      'updateTextRecord',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const dto = plainToInstance(UpdateTextRecordDto, {
+      title: ' 미팅 기록 ',
+      content: ' 회의 내용 ',
+      personIds: ['person-1', 'person-2'],
+    });
+
+    await expect(
+      controller.updateTextRecord(currentUser, 'record-1', dto),
+    ).resolves.toEqual({});
+
+    expect(Reflect.getMetadata(PATH_METADATA, updateTextRecordHandler)).toBe(
+      'text/:recordId',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, updateTextRecordHandler)).toBe(
+      RequestMethod.PATCH,
+    );
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, updateTextRecordHandler),
+    ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
+    expect(recordService.updateTextRecord).toHaveBeenCalledWith(
+      'user-1',
+      'record-1',
+      {
+        title: '미팅 기록',
+        content: '회의 내용',
+        personIds: ['person-1', 'person-2'],
+      },
+    );
   });
 
   it('registers GET /record/voice/:recordId behind auth and required agreements guards', async () => {
