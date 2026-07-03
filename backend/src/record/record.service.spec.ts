@@ -16,6 +16,10 @@ interface PrismaMock {
     findMany: jest.Mock;
     findFirst: jest.Mock;
     update: jest.Mock;
+    deleteMany: jest.Mock;
+  };
+  mediaFile: {
+    deleteMany: jest.Mock;
   };
   recordMemo: {
     deleteMany: jest.Mock;
@@ -35,6 +39,7 @@ describe('RecordService', () => {
   let prisma: PrismaMock;
   let s3Service: {
     getSignedUrl: jest.Mock;
+    deleteFiles: jest.Mock;
   };
   let openAISummaryService: {
     summarize: jest.Mock;
@@ -54,6 +59,10 @@ describe('RecordService', () => {
         findMany: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      mediaFile: {
+        deleteMany: jest.fn(),
       },
       recordMemo: {
         deleteMany: jest.fn(),
@@ -72,6 +81,7 @@ describe('RecordService', () => {
       getSignedUrl: jest.fn(
         (key: string) => `https://signed.example.com/${key}`,
       ),
+      deleteFiles: jest.fn().mockResolvedValue(undefined),
     };
     openAISummaryService = {
       summarize: jest.fn(),
@@ -1336,6 +1346,93 @@ describe('RecordService', () => {
       },
     });
     expect(prisma.recordPerson.createMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes a text record and lets database cascade remove child rows', async () => {
+    prisma.record.findFirst.mockResolvedValue({
+      id: 'record-1',
+      type: RecordType.TEXT,
+      voiceFile: null,
+    });
+    prisma.record.deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.deleteRecord('user-1', 'record-1'),
+    ).resolves.toEqual({
+      success: true,
+    });
+
+    expect(prisma.record.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+      },
+      select: {
+        id: true,
+        type: true,
+        voiceFile: {
+          select: {
+            id: true,
+            s3Key: true,
+          },
+        },
+      },
+    });
+    expect(prisma.mediaFile.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.record.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+      },
+    });
+    expect(s3Service.deleteFiles).not.toHaveBeenCalled();
+  });
+
+  it('deletes a voice record media file row and S3 object after database deletion', async () => {
+    prisma.record.findFirst.mockResolvedValue({
+      id: 'record-1',
+      type: RecordType.VOICE,
+      voiceFile: {
+        id: 'media-1',
+        s3Key: 'records/user-1/voice/recording.m4a',
+      },
+    });
+    prisma.mediaFile.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.record.deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.deleteRecord('user-1', 'record-1'),
+    ).resolves.toEqual({
+      success: true,
+    });
+
+    expect(prisma.mediaFile.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'media-1',
+        userId: 'user-1',
+      },
+    });
+    expect(prisma.record.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'record-1',
+        userId: 'user-1',
+      },
+    });
+    expect(s3Service.deleteFiles).toHaveBeenCalledWith([
+      'records/user-1/voice/recording.m4a',
+    ]);
+  });
+
+  it('throws not found and does not delete S3 when the record does not exist for the user', async () => {
+    prisma.record.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.deleteRecord('user-1', 'record-missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.mediaFile.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.record.deleteMany).not.toHaveBeenCalled();
+    expect(s3Service.deleteFiles).not.toHaveBeenCalled();
   });
 
   it('rejects updates when no editable fields are provided', async () => {

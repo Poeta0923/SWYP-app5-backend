@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -337,6 +338,38 @@ export class RecordController {
     @Body() dto: UpdateVoiceRecordDto,
   ) {
     return this.recordService.updateVoiceRecord(currentUser.sub, recordId, dto);
+  }
+
+  @Delete(':recordId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '기록 삭제',
+    description:
+      'TEXT 기록은 연결 인물, 키워드, 메모를 cascade로 함께 삭제하고, VOICE 기록은 연결된 음성 파일도 S3에서 삭제합니다.',
+  })
+  @ApiOkResponse({
+    description: '기록 삭제 성공',
+    schema: {
+      example: {
+        success: true,
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '기록을 찾을 수 없음',
+  })
+  deleteRecord(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.recordService.deleteRecord(currentUser.sub, recordId);
   }
 }
 
