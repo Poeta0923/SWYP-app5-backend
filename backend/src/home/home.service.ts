@@ -84,20 +84,12 @@ export class HomeService {
       take: HOME_SCHEDULE_LIMIT,
     });
 
-    return schedules
-      .filter(
-        (
-          schedule,
-        ): schedule is typeof schedule & {
-          scheduleTime: Date;
-        } => schedule.scheduleTime !== null,
-      )
-      .map((schedule) => ({
-        id: schedule.id,
-        title: schedule.title,
-        scheduleTime: schedule.scheduleTime.toISOString(),
-        dDay: this.toDDay(now, schedule.scheduleTime),
-      }));
+    return schedules.map((schedule) => ({
+      id: schedule.id,
+      title: schedule.title,
+      scheduleTime: schedule.scheduleTime.toISOString(),
+      dDay: this.toDDay(now, schedule.scheduleTime),
+    }));
   }
 
   private async getImportantPeople(

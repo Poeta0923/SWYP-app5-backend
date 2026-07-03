@@ -325,8 +325,8 @@ model Schedule {
   userId              String            @map("user_id")
   title               String            @default("제목 없음")
   content             String?
-  scheduleTime        DateTime?         @map("schedule_time")
-  reminderTime        DateTime?         @map("reminder_time")
+  scheduleTime        DateTime          @map("schedule_time")
+  reminderTime        DateTime          @map("reminder_time")
   notificationEnabled Boolean           @default(false) @map("notification_enabled")
   people              SchedulePerson[]
   notificationJobs    NotificationJob[]

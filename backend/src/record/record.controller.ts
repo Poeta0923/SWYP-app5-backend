@@ -155,7 +155,7 @@ export class RecordController {
   @ApiOperation({
     summary: '음성 기록 상세 조회',
     description:
-      '음성 기록의 제목, 생성 시각, 연결 인물, 키워드, 내용, 메모, 녹음 파일 signed URL을 조회합니다.',
+      '음성 기록의 제목, 생성 시각, 연결 인물, 키워드, 내용, 메모, 녹음 파일 signed URL과 연결 일정 정보를 조회합니다.',
   })
   @ApiOkResponse({
     description: '음성 기록 상세 조회 성공',
@@ -183,7 +183,7 @@ export class RecordController {
   @ApiOperation({
     summary: '음성 기록 내용 요약',
     description:
-      '음성 기록 content를 OpenAI API로 요약하고, 요약 결과로 기존 content를 덮어씁니다.',
+      '음성 기록 content를 OpenAI API로 요약하고, 요약 결과로 기존 content를 덮어쓴 뒤 연결 일정 정보를 함께 반환합니다.',
   })
   @ApiOkResponse({
     description: '음성 기록 요약 성공',
@@ -217,7 +217,7 @@ export class RecordController {
   @ApiOperation({
     summary: '음성 기록 수정',
     description:
-      '음성 기록의 제목, 기록 메모, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체합니다.',
+      '음성 기록의 제목, 기록 메모, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체하며, 연결 일정 정보도 함께 반환합니다.',
   })
   @ApiBody({ type: UpdateVoiceRecordDto })
   @ApiOkResponse({
