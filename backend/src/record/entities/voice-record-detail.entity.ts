@@ -3,6 +3,7 @@ import type {
   VoiceRecordDetailPersonResponse,
   VoiceRecordDetailResponse,
 } from '../record.service';
+import { VoiceRecordScheduleEntity } from './voice-record-schedule.entity';
 
 export class VoiceRecordDetailPersonEntity implements VoiceRecordDetailPersonResponse {
   @ApiProperty({
@@ -79,4 +80,11 @@ export class VoiceRecordDetailEntity implements VoiceRecordDetailResponse {
     nullable: true,
   })
   voiceFileUrl: string | null;
+
+  @ApiPropertyOptional({
+    type: VoiceRecordScheduleEntity,
+    description: '기록에 연결된 일정 정보',
+    nullable: true,
+  })
+  schedule: VoiceRecordScheduleEntity | null;
 }

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { VoiceRecordSummaryResponse } from '../record.service';
+import { VoiceRecordScheduleEntity } from './voice-record-schedule.entity';
 
 export class VoiceRecordSummaryEntity implements VoiceRecordSummaryResponse {
   @ApiProperty({
@@ -47,4 +48,11 @@ export class VoiceRecordSummaryEntity implements VoiceRecordSummaryResponse {
     nullable: true,
   })
   recordMemo: string | null;
+
+  @ApiPropertyOptional({
+    type: VoiceRecordScheduleEntity,
+    description: '기록에 연결된 일정 정보',
+    nullable: true,
+  })
+  schedule: VoiceRecordScheduleEntity | null;
 }

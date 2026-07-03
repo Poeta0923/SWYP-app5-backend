@@ -20,6 +20,10 @@ interface PrismaMock {
     deleteMany: jest.Mock;
     upsert: jest.Mock;
   };
+  recordKeyword: {
+    deleteMany: jest.Mock;
+    createMany: jest.Mock;
+  };
   recordPerson: {
     deleteMany: jest.Mock;
     createMany: jest.Mock;
@@ -30,6 +34,9 @@ describe('RecordService', () => {
   let prisma: PrismaMock;
   let s3Service: {
     getSignedUrl: jest.Mock;
+  };
+  let openAISummaryService: {
+    summarize: jest.Mock;
   };
   let service: RecordService;
 
@@ -50,6 +57,10 @@ describe('RecordService', () => {
         deleteMany: jest.fn(),
         upsert: jest.fn(),
       },
+      recordKeyword: {
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
+      },
       recordPerson: {
         deleteMany: jest.fn(),
         createMany: jest.fn(),
@@ -60,11 +71,14 @@ describe('RecordService', () => {
         (key: string) => `https://signed.example.com/${key}`,
       ),
     };
+    openAISummaryService = {
+      summarize: jest.fn(),
+    };
     service = new RecordService(
       prisma as unknown as PrismaService,
       s3Service as unknown as S3Service,
       {} as OpenAITranscriptionService,
-      {} as OpenAISummaryService,
+      openAISummaryService as unknown as OpenAISummaryService,
     );
   });
 
@@ -176,6 +190,22 @@ describe('RecordService', () => {
       voiceFile: {
         s3Key: 'records/user-1/voice/recording.m4a',
       },
+      schedule: {
+        id: 'schedule-1',
+        title: '점심 약속',
+        scheduleTime: new Date('2000-01-01T03:00:00.000Z'),
+        people: [
+          {
+            person: {
+              id: 'person-3',
+              name: '이철수',
+              profileImageFile: {
+                s3Key: 'people/user-1/profiles/schedule-profile.png',
+              },
+            },
+          },
+        ],
+      },
     });
 
     await expect(service.getVoiceRecord('user-1', 'record-1')).resolves.toEqual(
@@ -201,6 +231,20 @@ describe('RecordService', () => {
         recordMemo: '요약해 주세요',
         voiceFileUrl:
           'https://signed.example.com/records/user-1/voice/recording.m4a',
+        schedule: {
+          scheduleId: 'schedule-1',
+          title: '점심 약속',
+          scheduleTime: '2000-01-01T03:00:00.000Z',
+          dDay: 'D-0',
+          people: [
+            {
+              id: 'person-3',
+              name: '이철수',
+              image:
+                'https://signed.example.com/people/user-1/profiles/schedule-profile.png',
+            },
+          ],
+        },
       },
     );
 
@@ -253,6 +297,33 @@ describe('RecordService', () => {
             s3Key: true,
           },
         },
+        schedule: {
+          select: {
+            id: true,
+            title: true,
+            scheduleTime: true,
+            people: {
+              select: {
+                person: {
+                  select: {
+                    id: true,
+                    name: true,
+                    profileImageFile: {
+                      select: {
+                        s3Key: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                person: {
+                  name: Prisma.SortOrder.asc,
+                },
+              },
+            },
+          },
+        },
       },
     });
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
@@ -260,6 +331,9 @@ describe('RecordService', () => {
     );
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
       'records/user-1/voice/recording.m4a',
+    );
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
+      'people/user-1/profiles/schedule-profile.png',
     );
   });
 
@@ -269,6 +343,139 @@ describe('RecordService', () => {
     await expect(
       service.getVoiceRecord('user-1', 'record-missing'),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('summarizes a voice record and returns linked schedule with signed profile URLs', async () => {
+    prisma.record.findFirst.mockResolvedValue({
+      id: 'record-1',
+      content: ' 회의 내용 전문 ',
+    });
+    openAISummaryService.summarize.mockResolvedValue({
+      summary: '요약된 회의 내용',
+      keywords: ['미팅', '후속 액션'],
+    });
+    prisma.recordKeyword.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.recordKeyword.createMany.mockResolvedValue({ count: 2 });
+    prisma.record.update.mockResolvedValue({
+      id: 'record-1',
+      title: '통화 녹음',
+      createdAt: new Date('2026-07-02T01:00:00.000Z'),
+      content: '요약된 회의 내용',
+      keywords: [{ name: '미팅' }, { name: '후속 액션' }],
+      recordMemo: {
+        content: '요약해 주세요',
+      },
+      voiceFile: {
+        s3Key: 'records/user-1/voice/recording.m4a',
+      },
+      schedule: {
+        id: 'schedule-1',
+        title: '후속 미팅',
+        scheduleTime: new Date('2000-01-01T03:00:00.000Z'),
+        people: [
+          {
+            person: {
+              id: 'person-1',
+              name: '홍길동',
+              profileImageFile: {
+                s3Key: 'people/user-1/profiles/profile.png',
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    await expect(
+      service.summarizeVoiceRecord('user-1', 'record-1'),
+    ).resolves.toEqual({
+      recordId: 'record-1',
+      title: '통화 녹음',
+      createdAt: '2026-07-02T01:00:00.000Z',
+      keyword: ['미팅', '후속 액션'],
+      content: '요약된 회의 내용',
+      voiceFileUrl:
+        'https://signed.example.com/records/user-1/voice/recording.m4a',
+      recordMemo: '요약해 주세요',
+      schedule: {
+        scheduleId: 'schedule-1',
+        title: '후속 미팅',
+        scheduleTime: '2000-01-01T03:00:00.000Z',
+        dDay: 'D-0',
+        people: [
+          {
+            id: 'person-1',
+            name: '홍길동',
+            image:
+              'https://signed.example.com/people/user-1/profiles/profile.png',
+          },
+        ],
+      },
+    });
+
+    expect(openAISummaryService.summarize).toHaveBeenCalledWith(
+      '회의 내용 전문',
+    );
+    expect(prisma.recordKeyword.deleteMany).toHaveBeenCalledWith({
+      where: {
+        recordId: 'record-1',
+        userId: 'user-1',
+      },
+    });
+    expect(prisma.recordKeyword.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          userId: 'user-1',
+          recordId: 'record-1',
+          name: '미팅',
+        },
+        {
+          userId: 'user-1',
+          recordId: 'record-1',
+          name: '후속 액션',
+        },
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.record.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'record-1',
+        },
+        data: {
+          content: '요약된 회의 내용',
+        },
+        select: expect.objectContaining({
+          schedule: {
+            select: {
+              id: true,
+              title: true,
+              scheduleTime: true,
+              people: {
+                select: {
+                  person: {
+                    select: {
+                      id: true,
+                      name: true,
+                      profileImageFile: {
+                        select: {
+                          s3Key: true,
+                        },
+                      },
+                    },
+                  },
+                },
+                orderBy: {
+                  person: {
+                    name: Prisma.SortOrder.asc,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      }),
+    );
   });
 
   it('updates a voice record title, memo, and replaces connected people', async () => {
@@ -304,6 +511,22 @@ describe('RecordService', () => {
             },
           },
         ],
+        schedule: {
+          id: 'schedule-1',
+          title: '후속 미팅',
+          scheduleTime: new Date('2000-01-01T03:00:00.000Z'),
+          people: [
+            {
+              person: {
+                id: 'person-1',
+                name: '홍길동',
+                profileImageFile: {
+                  s3Key: 'people/user-1/profiles/profile.png',
+                },
+              },
+            },
+          ],
+        },
       });
     prisma.person.findMany.mockResolvedValue([
       { id: 'person-1' },
@@ -342,6 +565,20 @@ describe('RecordService', () => {
       recordMemo: '다시 볼 것',
       voiceFileUrl:
         'https://signed.example.com/records/user-1/voice/recording.m4a',
+      schedule: {
+        scheduleId: 'schedule-1',
+        title: '후속 미팅',
+        scheduleTime: '2000-01-01T03:00:00.000Z',
+        dDay: 'D-0',
+        people: [
+          {
+            id: 'person-1',
+            name: '홍길동',
+            image:
+              'https://signed.example.com/people/user-1/profiles/profile.png',
+          },
+        ],
+      },
     });
 
     expect(prisma.record.findFirst).toHaveBeenNthCalledWith(1, {
@@ -463,6 +700,33 @@ describe('RecordService', () => {
             },
           },
         },
+        schedule: {
+          select: {
+            id: true,
+            title: true,
+            scheduleTime: true,
+            people: {
+              select: {
+                person: {
+                  select: {
+                    id: true,
+                    name: true,
+                    profileImageFile: {
+                      select: {
+                        s3Key: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                person: {
+                  name: Prisma.SortOrder.asc,
+                },
+              },
+            },
+          },
+        },
       },
     });
   });
@@ -479,6 +743,7 @@ describe('RecordService', () => {
         recordMemo: null,
         voiceFile: null,
         people: [],
+        schedule: null,
       });
     prisma.record.update.mockResolvedValue({});
     prisma.recordMemo.deleteMany.mockResolvedValue({ count: 1 });
@@ -498,6 +763,7 @@ describe('RecordService', () => {
       content: '회의 내용 전문',
       recordMemo: null,
       voiceFileUrl: null,
+      schedule: null,
     });
 
     expect(prisma.person.findMany).not.toHaveBeenCalled();

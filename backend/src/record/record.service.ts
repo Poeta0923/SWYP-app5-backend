@@ -16,6 +16,8 @@ import type { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
 import { OpenAISummaryService } from './openai-summary.service';
 import { OpenAITranscriptionService } from './openai-transcription.service';
 
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export interface VoiceRecordFile {
   buffer: Buffer;
   mimetype: string;
@@ -27,6 +29,20 @@ export interface VoiceRecordSttResponse {
   id: string;
 }
 
+export interface VoiceRecordSchedulePersonResponse {
+  id: string;
+  name: string;
+  image: string | null;
+}
+
+export interface VoiceRecordScheduleResponse {
+  scheduleId: string;
+  title: string;
+  scheduleTime: string;
+  dDay: string;
+  people: VoiceRecordSchedulePersonResponse[];
+}
+
 export interface VoiceRecordSummaryResponse {
   recordId: string;
   title: string;
@@ -35,6 +51,7 @@ export interface VoiceRecordSummaryResponse {
   content: string;
   voiceFileUrl: string | null;
   recordMemo: string | null;
+  schedule: VoiceRecordScheduleResponse | null;
 }
 
 export interface VoiceRecordDetailPersonResponse {
@@ -52,6 +69,7 @@ export interface VoiceRecordDetailResponse {
   content: string;
   recordMemo: string | null;
   voiceFileUrl: string | null;
+  schedule: VoiceRecordScheduleResponse | null;
 }
 
 export interface VoiceRecordPersonResponse {
@@ -70,6 +88,19 @@ export interface VoiceRecordUpdateResponse {
 interface UploadedVoiceStorageFile extends UploadedS3File {
   originalName?: string;
 }
+
+type VoiceRecordScheduleData = {
+  id: string;
+  title: string;
+  scheduleTime: Date;
+  people: {
+    person: {
+      id: string;
+      name: string;
+      profileImageFile: { s3Key: string } | null;
+    };
+  }[];
+};
 
 @Injectable()
 export class RecordService {
@@ -224,6 +255,33 @@ export class RecordService {
             s3Key: true,
           },
         },
+        schedule: {
+          select: {
+            id: true,
+            title: true,
+            scheduleTime: true,
+            people: {
+              select: {
+                person: {
+                  select: {
+                    id: true,
+                    name: true,
+                    profileImageFile: {
+                      select: {
+                        s3Key: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                person: {
+                  name: Prisma.SortOrder.asc,
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -248,6 +306,7 @@ export class RecordService {
       content: record.content ?? '',
       recordMemo: record.recordMemo?.content ?? null,
       voiceFileUrl: this.toSignedMediaFileUrl(record.voiceFile),
+      schedule: this.toVoiceRecordScheduleResponse(record.schedule, new Date()),
     };
   }
 
@@ -334,6 +393,33 @@ export class RecordService {
               s3Key: true,
             },
           },
+          schedule: {
+            select: {
+              id: true,
+              title: true,
+              scheduleTime: true,
+              people: {
+                select: {
+                  person: {
+                    select: {
+                      id: true,
+                      name: true,
+                      profileImageFile: {
+                        select: {
+                          s3Key: true,
+                        },
+                      },
+                    },
+                  },
+                },
+                orderBy: {
+                  person: {
+                    name: Prisma.SortOrder.asc,
+                  },
+                },
+              },
+            },
+          },
         },
       });
     });
@@ -346,6 +432,10 @@ export class RecordService {
       content: updatedRecord.content ?? '',
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
       recordMemo: updatedRecord.recordMemo?.content ?? null,
+      schedule: this.toVoiceRecordScheduleResponse(
+        updatedRecord.schedule,
+        new Date(),
+      ),
     };
   }
 
@@ -496,6 +586,33 @@ export class RecordService {
               },
             },
           },
+          schedule: {
+            select: {
+              id: true,
+              title: true,
+              scheduleTime: true,
+              people: {
+                select: {
+                  person: {
+                    select: {
+                      id: true,
+                      name: true,
+                      profileImageFile: {
+                        select: {
+                          s3Key: true,
+                        },
+                      },
+                    },
+                  },
+                },
+                orderBy: {
+                  person: {
+                    name: Prisma.SortOrder.asc,
+                  },
+                },
+              },
+            },
+          },
         },
       });
     });
@@ -521,6 +638,10 @@ export class RecordService {
       content: updatedRecord.content ?? '',
       recordMemo: updatedRecord.recordMemo?.content ?? null,
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
+      schedule: this.toVoiceRecordScheduleResponse(
+        updatedRecord.schedule,
+        new Date(),
+      ),
     };
   }
 
@@ -578,6 +699,44 @@ export class RecordService {
     mediaFile: { s3Key: string } | null,
   ): string | null {
     return mediaFile ? this.s3Service.getSignedUrl(mediaFile.s3Key) : null;
+  }
+
+  private toVoiceRecordScheduleResponse(
+    schedule: VoiceRecordScheduleData | null | undefined,
+    now: Date,
+  ): VoiceRecordScheduleResponse | null {
+    if (!schedule) {
+      return null;
+    }
+
+    return {
+      scheduleId: schedule.id,
+      title: schedule.title,
+      scheduleTime: schedule.scheduleTime.toISOString(),
+      dDay: this.toDDay(now, schedule.scheduleTime),
+      people: schedule.people.map(({ person }) => ({
+        id: person.id,
+        name: person.name,
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      })),
+    };
+  }
+
+  private toDDay(now: Date, scheduleTime: Date): string {
+    const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const scheduleDate = new Date(
+      scheduleTime.getFullYear(),
+      scheduleTime.getMonth(),
+      scheduleTime.getDate(),
+    );
+    const daysLeft = Math.max(
+      0,
+      Math.floor(
+        (scheduleDate.getTime() - nowDate.getTime()) / MILLISECONDS_PER_DAY,
+      ),
+    );
+
+    return `D-${daysLeft}`;
   }
 
   private async findVoiceRecordForUpdateOrThrow(
