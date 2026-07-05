@@ -1,2 +1,8 @@
 .vscode
 CLAUDE.md
+
+# Firebase service account keys
+backend/.secrets/
+backend/*firebase-adminsdk*.json
+backend/firebase-service-account*.json
+backend/service-account*.json

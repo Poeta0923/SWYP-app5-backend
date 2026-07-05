@@ -13,6 +13,8 @@ import { S3Module } from './s3/s3.module';
 import { HomeModule } from './home/home.module';
 import { UsersModule } from './users/users.module';
 import { RecordModule } from './record/record.module';
+import { ScheduleModule } from './schedule/schedule.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { RecordModule } from './record/record.module';
     HomeModule,
     UsersModule,
     RecordModule,
+    ScheduleModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
