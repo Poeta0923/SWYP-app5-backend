@@ -13,7 +13,8 @@ import { S3Service } from '../s3/s3.service';
 import type { CreateScheduleDto } from './dto/create-schedule.dto';
 import type { UpdateScheduleDto } from './dto/update-schedule.dto';
 
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const MILLISECONDS_PER_MINUTE = 60 * 1000;
+const MILLISECONDS_PER_DAY = 24 * 60 * MILLISECONDS_PER_MINUTE;
 
 export interface SchedulePersonResponse {
   id: string;
@@ -27,7 +28,7 @@ export interface ScheduleListItemResponse {
   people: SchedulePersonResponse[];
   scheduleTime: string;
   dDay: string;
-  reminderOffsetDays: number;
+  reminderOffsetMinutes: number;
 }
 
 export interface ScheduleDetailResponse {
@@ -37,7 +38,7 @@ export interface ScheduleDetailResponse {
   people: SchedulePersonResponse[];
   content: string | null;
   notificationEnabled: boolean;
-  reminderOffsetDays: number;
+  reminderOffsetMinutes: number;
 }
 
 type ScheduleProfileImageFile = {
@@ -67,7 +68,7 @@ export class ScheduleService {
           content: item.content ?? null,
           scheduleTime,
           notificationEnabled: item.notificationEnabled,
-          reminderOffsetDays: item.reminderOffsetDays,
+          reminderOffsetMinutes: item.reminderOffsetMinutes,
         },
         select: {
           id: true,
@@ -107,7 +108,7 @@ export class ScheduleService {
             scheduleId: schedule.id,
             scheduledAt: this.toScheduledAt(
               scheduleTime,
-              item.reminderOffsetDays,
+              item.reminderOffsetMinutes,
             ),
             dedupeKey: this.toScheduleNotificationDedupeKey(schedule.id),
           },
@@ -146,7 +147,7 @@ export class ScheduleService {
         id: true,
         title: true,
         scheduleTime: true,
-        reminderOffsetDays: true,
+        reminderOffsetMinutes: true,
         people: {
           select: {
             person: {
@@ -179,7 +180,7 @@ export class ScheduleService {
       ),
       scheduleTime: schedule.scheduleTime.toISOString(),
       dDay: this.toDDay(now, schedule.scheduleTime),
-      reminderOffsetDays: schedule.reminderOffsetDays,
+      reminderOffsetMinutes: schedule.reminderOffsetMinutes,
     }));
   }
 
@@ -219,7 +220,7 @@ export class ScheduleService {
       !this.hasOwn(item, 'personIds') &&
       !this.hasOwn(item, 'content') &&
       !this.hasOwn(item, 'notificationEnabled') &&
-      !this.hasOwn(item, 'reminderOffsetDays')
+      !this.hasOwn(item, 'reminderOffsetMinutes')
     ) {
       throw new BadRequestException({
         code: 'SCHEDULE_UPDATE_EMPTY',
@@ -270,8 +271,8 @@ export class ScheduleService {
         scheduleUpdateData.notificationEnabled = item.notificationEnabled;
       }
 
-      if (this.hasOwn(item, 'reminderOffsetDays')) {
-        scheduleUpdateData.reminderOffsetDays = item.reminderOffsetDays;
+      if (this.hasOwn(item, 'reminderOffsetMinutes')) {
+        scheduleUpdateData.reminderOffsetMinutes = item.reminderOffsetMinutes;
       }
 
       await tx.schedule.update({
@@ -345,7 +346,7 @@ export class ScheduleService {
     }[];
     content: string | null;
     notificationEnabled: boolean;
-    reminderOffsetDays: number;
+    reminderOffsetMinutes: number;
   }): ScheduleDetailResponse {
     return {
       id: schedule.id,
@@ -356,7 +357,7 @@ export class ScheduleService {
       ),
       content: schedule.content,
       notificationEnabled: schedule.notificationEnabled,
-      reminderOffsetDays: schedule.reminderOffsetDays,
+      reminderOffsetMinutes: schedule.reminderOffsetMinutes,
     };
   }
 
@@ -367,7 +368,7 @@ export class ScheduleService {
       scheduleTime: true,
       content: true,
       notificationEnabled: true,
-      reminderOffsetDays: true,
+      reminderOffsetMinutes: true,
       people: {
         select: {
           person: {
@@ -466,10 +467,10 @@ export class ScheduleService {
 
   private toScheduledAt(
     scheduleTime: Date,
-    reminderOffsetDays: number,
+    reminderOffsetMinutes: number,
   ): Date {
     return new Date(
-      scheduleTime.getTime() - reminderOffsetDays * MILLISECONDS_PER_DAY,
+      scheduleTime.getTime() - reminderOffsetMinutes * MILLISECONDS_PER_MINUTE,
     );
   }
 
@@ -484,7 +485,7 @@ export class ScheduleService {
       id: string;
       scheduleTime: Date;
       notificationEnabled: boolean;
-      reminderOffsetDays: number;
+      reminderOffsetMinutes: number;
     },
   ): Promise<void> {
     const dedupeKey = this.toScheduleNotificationDedupeKey(schedule.id);
@@ -516,7 +517,7 @@ export class ScheduleService {
         scheduleId: schedule.id,
         scheduledAt: this.toScheduledAt(
           schedule.scheduleTime,
-          schedule.reminderOffsetDays,
+          schedule.reminderOffsetMinutes,
         ),
         dedupeKey,
       },
@@ -524,7 +525,7 @@ export class ScheduleService {
         status: NotificationStatus.PENDING,
         scheduledAt: this.toScheduledAt(
           schedule.scheduleTime,
-          schedule.reminderOffsetDays,
+          schedule.reminderOffsetMinutes,
         ),
         attemptCount: 0,
         sentAt: null,
