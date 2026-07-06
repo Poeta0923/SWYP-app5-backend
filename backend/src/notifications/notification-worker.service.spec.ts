@@ -1,4 +1,7 @@
-import { NotificationStatus, NotificationType } from '../../generated/prisma/client';
+import {
+  NotificationStatus,
+  NotificationType,
+} from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FcmNotificationService } from './fcm-notification.service';
 import { NotificationWorkerService } from './notification-worker.service';
@@ -7,6 +10,7 @@ interface PrismaMock {
   notificationJob: {
     findMany: jest.Mock;
     update: jest.Mock;
+    upsert: jest.Mock;
   };
 }
 
@@ -14,6 +18,7 @@ describe('NotificationWorkerService', () => {
   let prisma: PrismaMock;
   let fcmNotificationService: {
     sendScheduleNotification: jest.Mock;
+    sendBirthdayNotification: jest.Mock;
   };
   let service: NotificationWorkerService;
 
@@ -23,10 +28,12 @@ describe('NotificationWorkerService', () => {
       notificationJob: {
         findMany: jest.fn(),
         update: jest.fn(),
+        upsert: jest.fn(),
       },
     };
     fcmNotificationService = {
       sendScheduleNotification: jest.fn(),
+      sendBirthdayNotification: jest.fn(),
     };
     service = new NotificationWorkerService(
       prisma as unknown as PrismaService,
@@ -43,7 +50,10 @@ describe('NotificationWorkerService', () => {
       {
         id: 'job-1',
         userId: 'user-1',
+        type: NotificationType.SCHEDULE,
+        dedupeKey: 'schedule:schedule-1',
         attemptCount: 0,
+        person: null,
         schedule: {
           id: 'schedule-1',
           title: '오늘 미팅',
@@ -63,7 +73,9 @@ describe('NotificationWorkerService', () => {
     expect(prisma.notificationJob.findMany).toHaveBeenCalledWith({
       where: {
         status: NotificationStatus.PENDING,
-        type: NotificationType.SCHEDULE,
+        type: {
+          in: [NotificationType.SCHEDULE, NotificationType.BIRTHDAY],
+        },
         scheduledAt: {
           lte: new Date('2026-07-05T12:00:00.000Z'),
         },
@@ -71,6 +83,8 @@ describe('NotificationWorkerService', () => {
       select: {
         id: true,
         userId: true,
+        type: true,
+        dedupeKey: true,
         attemptCount: true,
         schedule: {
           select: {
@@ -79,20 +93,28 @@ describe('NotificationWorkerService', () => {
             scheduleTime: true,
           },
         },
+        person: {
+          select: {
+            id: true,
+            name: true,
+            birthDate: true,
+            birthdayNotificationOffsetMinutes: true,
+          },
+        },
       },
       orderBy: {
         scheduledAt: 'asc',
       },
       take: 20,
     });
-    expect(fcmNotificationService.sendScheduleNotification).toHaveBeenCalledWith(
-      {
-        userId: 'user-1',
-        scheduleId: 'schedule-1',
-        title: '오늘 미팅',
-        body: expect.stringContaining('일정이 예정되어 있습니다.'),
-      },
-    );
+    expect(
+      fcmNotificationService.sendScheduleNotification,
+    ).toHaveBeenCalledWith({
+      userId: 'user-1',
+      scheduleId: 'schedule-1',
+      title: '오늘 미팅',
+      body: expect.stringContaining('일정이 예정되어 있습니다.'),
+    });
     expect(prisma.notificationJob.update).toHaveBeenCalledWith({
       where: {
         id: 'job-1',
@@ -116,7 +138,10 @@ describe('NotificationWorkerService', () => {
       {
         id: 'job-1',
         userId: 'user-1',
+        type: NotificationType.SCHEDULE,
+        dedupeKey: 'schedule:schedule-1',
         attemptCount: 0,
+        person: null,
         schedule: {
           id: 'schedule-1',
           title: '오늘 미팅',
@@ -155,14 +180,19 @@ describe('NotificationWorkerService', () => {
       {
         id: 'job-1',
         userId: 'user-1',
+        type: NotificationType.SCHEDULE,
+        dedupeKey: 'schedule:schedule-1',
         attemptCount: 0,
+        person: null,
         schedule: null,
       },
     ]);
 
     await service.processDueScheduleNotifications();
 
-    expect(fcmNotificationService.sendScheduleNotification).not.toHaveBeenCalled();
+    expect(
+      fcmNotificationService.sendScheduleNotification,
+    ).not.toHaveBeenCalled();
     expect(prisma.notificationJob.update).toHaveBeenCalledWith({
       where: {
         id: 'job-1',
@@ -176,6 +206,83 @@ describe('NotificationWorkerService', () => {
         lastAttemptAt: new Date('2026-07-05T12:00:00.000Z'),
         errorCode: 'SCHEDULE_NOT_FOUND',
         errorMessage: '알림을 보낼 일정을 찾을 수 없습니다.',
+      },
+    });
+  });
+
+  it('processes due pending birthday notification jobs and schedules next year', async () => {
+    prisma.notificationJob.findMany.mockResolvedValue([
+      {
+        id: 'job-1',
+        userId: 'user-1',
+        type: NotificationType.BIRTHDAY,
+        dedupeKey: 'birthday:person-1:2026',
+        attemptCount: 0,
+        schedule: null,
+        person: {
+          id: 'person-1',
+          name: '홍길동',
+          birthDate: new Date('1990-07-05T00:00:00.000Z'),
+          birthdayNotificationOffsetMinutes: 60,
+        },
+      },
+    ]);
+    fcmNotificationService.sendBirthdayNotification.mockResolvedValue({
+      successCount: 1,
+      failureCount: 0,
+      errorCode: null,
+      errorMessage: null,
+    });
+
+    await service.processDueScheduleNotifications();
+
+    expect(
+      fcmNotificationService.sendBirthdayNotification,
+    ).toHaveBeenCalledWith({
+      userId: 'user-1',
+      personId: 'person-1',
+      title: '홍길동님 생일',
+      body: '오늘은 홍길동님의 생일입니다.',
+    });
+    expect(prisma.notificationJob.update).toHaveBeenCalledWith({
+      where: {
+        id: 'job-1',
+      },
+      data: {
+        status: NotificationStatus.SENT,
+        attemptCount: {
+          increment: 1,
+        },
+        sentAt: new Date('2026-07-05T12:00:00.000Z'),
+        failedAt: null,
+        lastAttemptAt: new Date('2026-07-05T12:00:00.000Z'),
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+    expect(prisma.notificationJob.upsert).toHaveBeenCalledWith({
+      where: {
+        userId_dedupeKey: {
+          userId: 'user-1',
+          dedupeKey: 'birthday:person-1:2027',
+        },
+      },
+      create: {
+        userId: 'user-1',
+        type: NotificationType.BIRTHDAY,
+        personId: 'person-1',
+        scheduledAt: new Date('2027-07-04T23:00:00.000Z'),
+        dedupeKey: 'birthday:person-1:2027',
+      },
+      update: {
+        status: NotificationStatus.PENDING,
+        scheduledAt: new Date('2027-07-04T23:00:00.000Z'),
+        attemptCount: 0,
+        sentAt: null,
+        failedAt: null,
+        lastAttemptAt: null,
+        errorCode: null,
+        errorMessage: null,
       },
     });
   });

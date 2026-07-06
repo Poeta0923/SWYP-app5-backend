@@ -376,7 +376,7 @@ describe('PeopleController', () => {
           phoneNumber: ' 010-1234-5678 ',
           isImportant: 'true',
           birthdayNotificationEnabled: 'true',
-          birthdayNotificationOffsetDays: '1',
+          birthdayNotificationOffsetMinutes: '1',
           extraContacts: [
             {
               type: ' email ',
@@ -398,7 +398,7 @@ describe('PeopleController', () => {
         phoneNumber: '010-1234-5678',
         isImportant: true,
         birthdayNotificationEnabled: true,
-        birthdayNotificationOffsetDays: 1,
+        birthdayNotificationOffsetMinutes: 1,
         extraContacts: [
           {
             type: 'email',
@@ -457,7 +457,7 @@ describe('PeopleController', () => {
           name: '홍길동',
           phoneNumber: '010-1234-5678',
           birthdayNotificationEnabled: true,
-          birthdayNotificationOffsetDays: -1,
+          birthdayNotificationOffsetMinutes: -1,
         }),
         [],
       ),
@@ -593,7 +593,7 @@ describe('PeopleController', () => {
       isImportant: 'true',
       phoneNumber: ' 010-1234-5678 ',
       job: '',
-      birthdayNotificationOffsetDays: '1',
+      birthdayNotificationOffsetMinutes: '1',
       extraContacts: [
         {
           type: ' email ',
@@ -614,7 +614,7 @@ describe('PeopleController', () => {
       isImportant: true,
       phoneNumber: '010-1234-5678',
       job: null,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       extraContacts: [
         {
           type: 'email',
@@ -630,7 +630,7 @@ describe('PeopleController', () => {
       { phoneNumber: null },
       { isImportant: null },
       { birthdayNotificationEnabled: null },
-      { birthdayNotificationOffsetDays: -1 },
+      { birthdayNotificationOffsetMinutes: -1 },
       { extraContacts: null },
       { extraContacts: [{ type: 'email' }] },
       { image: 'https://example.com/profile.png' },

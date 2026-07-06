@@ -184,15 +184,16 @@ export class CreatePersonItemDto {
   birthdayNotificationEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: '생일 며칠 전 알림을 보낼지. 생략하면 1일 전으로 저장합니다.',
-    example: 1,
+    description:
+      '생일 기준 몇 분 전에 알림을 보낼지. 생략하면 1440분(1일) 전으로 저장합니다.',
+    example: 1440,
     minimum: 0,
   })
   @Transform(optionalInteger)
   @IsOptional()
   @IsInt()
   @Min(0)
-  birthdayNotificationOffsetDays?: number;
+  birthdayNotificationOffsetMinutes?: number;
 
   @ApiPropertyOptional({
     description: '추가 연락처 목록',

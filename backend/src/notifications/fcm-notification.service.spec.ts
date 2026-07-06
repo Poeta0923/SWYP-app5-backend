@@ -104,6 +104,53 @@ describe('FcmNotificationService', () => {
     });
   });
 
+  it('sends a birthday notification to active user push tokens', async () => {
+    prisma.pushToken.findMany.mockResolvedValue([
+      {
+        id: 'push-token-1',
+        token: 'fcm-token-1',
+      },
+    ]);
+    messaging.sendEachForMulticast.mockResolvedValue({
+      successCount: 1,
+      failureCount: 0,
+      responses: [{ success: true }],
+    });
+
+    await expect(
+      service.sendBirthdayNotification({
+        userId: 'user-1',
+        personId: 'person-1',
+        title: '홍길동님 생일',
+        body: '오늘은 홍길동님의 생일입니다.',
+      }),
+    ).resolves.toEqual({
+      successCount: 1,
+      failureCount: 0,
+      errorCode: null,
+      errorMessage: null,
+    });
+
+    expect(messaging.sendEachForMulticast).toHaveBeenCalledWith({
+      tokens: ['fcm-token-1'],
+      notification: {
+        title: '홍길동님 생일',
+        body: '오늘은 홍길동님의 생일입니다.',
+      },
+      data: {
+        type: 'BIRTHDAY',
+        personId: 'person-1',
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+          },
+        },
+      },
+    });
+  });
+
   it('revokes invalid push tokens from FCM send response', async () => {
     prisma.pushToken.findMany.mockResolvedValue([
       {

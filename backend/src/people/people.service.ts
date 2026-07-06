@@ -6,6 +6,8 @@ import {
 import {
   MediaFileType,
   MediaFileUsage,
+  NotificationStatus,
+  NotificationType,
   Prisma,
   RecordType,
 } from '../../generated/prisma/client';
@@ -29,7 +31,9 @@ import {
 
 const PERSON_UPCOMING_SCHEDULE_LIMIT = 5;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
-const DEFAULT_BIRTHDAY_NOTIFICATION_OFFSET_DAYS = 1;
+const DEFAULT_BIRTHDAY_NOTIFICATION_OFFSET_MINUTES = 24 * 60;
+const BIRTHDAY_NOTIFICATION_HOUR_KST = 9;
+const KST_OFFSET_HOURS = 9;
 
 export interface PersonCategoryNamesResponse {
   jobs: string[];
@@ -85,7 +89,7 @@ export interface CreatedPersonResponse {
   relationship: string | null;
   personality: string | null;
   birthdayNotificationEnabled: boolean;
-  birthdayNotificationOffsetDays: number;
+  birthdayNotificationOffsetMinutes: number;
   extraContacts: {
     id: string;
     type: string;
@@ -171,7 +175,7 @@ type PersonDetailQueryResult = {
   relationship: string | null;
   personality: string | null;
   birthdayNotificationEnabled: boolean;
-  birthdayNotificationOffsetDays: number;
+  birthdayNotificationOffsetMinutes: number;
   profileImageFile: PersonProfileImageFile | null;
   extraContacts: {
     id: string;
@@ -186,11 +190,16 @@ type PersonDetailClient = Pick<
   'person' | 'schedule' | 'record'
 >;
 
+type BirthdayNotificationJobClient = Pick<
+  Prisma.TransactionClient,
+  'notificationJob'
+>;
+
 type ExistingPersonForUpdate = {
   id: string;
   phoneNumber: string;
   birthdayNotificationEnabled: boolean;
-  birthdayNotificationOffsetDays: number;
+  birthdayNotificationOffsetMinutes: number;
 };
 
 type PersonForDeletion = {
@@ -273,11 +282,12 @@ export class PeopleService {
             personality: item.personality,
             birthdayNotificationEnabled:
               item.birthdayNotificationEnabled ?? false,
-            birthdayNotificationOffsetDays:
-              item.birthdayNotificationOffsetDays ??
-              DEFAULT_BIRTHDAY_NOTIFICATION_OFFSET_DAYS,
+            birthdayNotificationOffsetMinutes:
+              item.birthdayNotificationOffsetMinutes ??
+              DEFAULT_BIRTHDAY_NOTIFICATION_OFFSET_MINUTES,
           },
         });
+        await this.syncBirthdayNotificationJob(tx, userId, createdPerson);
         const extraContacts = await this.createExtraContacts(
           tx,
           userId,
@@ -471,6 +481,8 @@ export class PeopleService {
           personId,
         });
       }
+
+      await this.syncBirthdayNotificationJob(tx, userId, updatedPerson);
 
       return this.toPersonDetailResponse(tx, userId, updatedPerson);
     });
@@ -773,7 +785,7 @@ export class PeopleService {
         id: true,
         phoneNumber: true,
         birthdayNotificationEnabled: true,
-        birthdayNotificationOffsetDays: true,
+        birthdayNotificationOffsetMinutes: true,
       },
     });
 
@@ -869,11 +881,133 @@ export class PeopleService {
     if (this.hasOwn(item, 'birthdayNotificationEnabled')) {
       data.birthdayNotificationEnabled = item.birthdayNotificationEnabled;
     }
-    if (this.hasOwn(item, 'birthdayNotificationOffsetDays')) {
-      data.birthdayNotificationOffsetDays = item.birthdayNotificationOffsetDays;
+    if (this.hasOwn(item, 'birthdayNotificationOffsetMinutes')) {
+      data.birthdayNotificationOffsetMinutes =
+        item.birthdayNotificationOffsetMinutes;
     }
 
     return data;
+  }
+
+  private async syncBirthdayNotificationJob(
+    client: BirthdayNotificationJobClient,
+    userId: string,
+    person: {
+      id: string;
+      birthDate: Date | null;
+      birthdayNotificationEnabled: boolean;
+      birthdayNotificationOffsetMinutes: number;
+    },
+  ): Promise<void> {
+    if (!person.birthdayNotificationEnabled || !person.birthDate) {
+      await client.notificationJob.updateMany({
+        where: {
+          userId,
+          type: NotificationType.BIRTHDAY,
+          personId: person.id,
+          status: NotificationStatus.PENDING,
+        },
+        data: {
+          status: NotificationStatus.CANCELED,
+        },
+      });
+      return;
+    }
+
+    const scheduledBirthday = this.toNextBirthdayNotificationSchedule(
+      person.birthDate,
+      person.birthdayNotificationOffsetMinutes,
+      new Date(),
+    );
+    const dedupeKey = this.toBirthdayNotificationDedupeKey(
+      person.id,
+      scheduledBirthday.year,
+    );
+
+    await client.notificationJob.updateMany({
+      where: {
+        userId,
+        type: NotificationType.BIRTHDAY,
+        personId: person.id,
+        status: NotificationStatus.PENDING,
+        dedupeKey: {
+          not: dedupeKey,
+        },
+      },
+      data: {
+        status: NotificationStatus.CANCELED,
+      },
+    });
+
+    await client.notificationJob.upsert({
+      where: {
+        userId_dedupeKey: {
+          userId,
+          dedupeKey,
+        },
+      },
+      create: {
+        userId,
+        type: NotificationType.BIRTHDAY,
+        personId: person.id,
+        scheduledAt: scheduledBirthday.scheduledAt,
+        dedupeKey,
+      },
+      update: {
+        status: NotificationStatus.PENDING,
+        scheduledAt: scheduledBirthday.scheduledAt,
+        attemptCount: 0,
+        sentAt: null,
+        failedAt: null,
+        lastAttemptAt: null,
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+  }
+
+  private toNextBirthdayNotificationSchedule(
+    birthDate: Date,
+    offsetMinutes: number,
+    now: Date,
+  ): { year: number; scheduledAt: Date } {
+    const currentKstYear = new Date(
+      now.getTime() + KST_OFFSET_HOURS * 60 * 60 * 1000,
+    ).getUTCFullYear();
+    const currentYearBirthdayAt = this.toBirthdayNotificationAt(
+      birthDate,
+      currentKstYear,
+    );
+    const targetYear =
+      currentYearBirthdayAt.getTime() <= now.getTime()
+        ? currentKstYear + 1
+        : currentKstYear;
+
+    return {
+      year: targetYear,
+      scheduledAt: new Date(
+        this.toBirthdayNotificationAt(birthDate, targetYear).getTime() -
+          offsetMinutes * 60 * 1000,
+      ),
+    };
+  }
+
+  private toBirthdayNotificationAt(birthDate: Date, year: number): Date {
+    return new Date(
+      Date.UTC(
+        year,
+        birthDate.getUTCMonth(),
+        birthDate.getUTCDate(),
+        BIRTHDAY_NOTIFICATION_HOUR_KST - KST_OFFSET_HOURS,
+      ),
+    );
+  }
+
+  private toBirthdayNotificationDedupeKey(
+    personId: string,
+    year: number,
+  ): string {
+    return `birthday:${personId}:${year}`;
   }
 
   private async uploadPersonFiles(
@@ -1299,7 +1433,7 @@ export class PeopleService {
       relationship: true,
       personality: true,
       birthdayNotificationEnabled: true,
-      birthdayNotificationOffsetDays: true,
+      birthdayNotificationOffsetMinutes: true,
       profileImageFile: {
         select: {
           s3Key: true,

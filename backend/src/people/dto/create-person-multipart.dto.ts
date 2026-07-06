@@ -15,7 +15,7 @@ export class CreatePersonMultipartDto {
       relationship: '동료',
       personality: '차분하고 꼼꼼함',
       birthdayNotificationEnabled: true,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1440,
       extraContacts: [
         {
           type: 'email',

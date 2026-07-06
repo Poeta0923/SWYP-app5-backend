@@ -14,11 +14,25 @@ export interface SendScheduleNotificationParams {
   body: string;
 }
 
+export interface SendBirthdayNotificationParams {
+  userId: string;
+  personId: string;
+  title: string;
+  body: string;
+}
+
 export interface SendNotificationResult {
   successCount: number;
   failureCount: number;
   errorCode: string | null;
   errorMessage: string | null;
+}
+
+interface SendPushNotificationParams {
+  userId: string;
+  title: string;
+  body: string;
+  data: Record<string, string>;
 }
 
 @Injectable()
@@ -30,6 +44,34 @@ export class FcmNotificationService {
 
   async sendScheduleNotification(
     params: SendScheduleNotificationParams,
+  ): Promise<SendNotificationResult> {
+    return this.sendPushNotification({
+      userId: params.userId,
+      title: params.title,
+      body: params.body,
+      data: {
+        type: 'SCHEDULE',
+        scheduleId: params.scheduleId,
+      },
+    });
+  }
+
+  async sendBirthdayNotification(
+    params: SendBirthdayNotificationParams,
+  ): Promise<SendNotificationResult> {
+    return this.sendPushNotification({
+      userId: params.userId,
+      title: params.title,
+      body: params.body,
+      data: {
+        type: 'BIRTHDAY',
+        personId: params.personId,
+      },
+    });
+  }
+
+  private async sendPushNotification(
+    params: SendPushNotificationParams,
   ): Promise<SendNotificationResult> {
     const pushTokens = await this.prisma.pushToken.findMany({
       where: {
@@ -60,10 +102,7 @@ export class FcmNotificationService {
             title: params.title,
             body: params.body,
           },
-          data: {
-            type: 'SCHEDULE',
-            scheduleId: params.scheduleId,
-          },
+          data: params.data,
           apns: {
             payload: {
               aps: {
