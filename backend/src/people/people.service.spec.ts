@@ -55,6 +55,11 @@ interface TestTransactionClient {
   recordPerson: {
     deleteMany: jest.Mock;
   };
+  notificationJob: {
+    create: jest.Mock;
+    updateMany: jest.Mock;
+    upsert: jest.Mock;
+  };
 }
 
 interface PrismaMock extends TestTransactionClient {
@@ -97,6 +102,7 @@ describe('PeopleService', () => {
             schedule: prisma.schedule,
             record: prisma.record,
             recordPerson: prisma.recordPerson,
+            notificationJob: prisma.notificationJob,
           };
 
           return input(transactionClient);
@@ -147,6 +153,11 @@ describe('PeopleService', () => {
       },
       recordPerson: {
         deleteMany: jest.fn(),
+      },
+      notificationJob: {
+        create: jest.fn(),
+        updateMany: jest.fn(),
+        upsert: jest.fn(),
       },
     };
     s3Service = {
@@ -325,7 +336,7 @@ describe('PeopleService', () => {
       relationship: '동료',
       personality: '꼼꼼함',
       birthdayNotificationEnabled: true,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       profileImageFile: {
         s3Key: 'profiles/profile.png',
       },
@@ -414,7 +425,7 @@ describe('PeopleService', () => {
       relationship: '동료',
       personality: '꼼꼼함',
       birthdayNotificationEnabled: true,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       extraContacts: [
         {
           id: 'extra-contact-1',
@@ -483,7 +494,7 @@ describe('PeopleService', () => {
         relationship: true,
         personality: true,
         birthdayNotificationEnabled: true,
-        birthdayNotificationOffsetDays: true,
+        birthdayNotificationOffsetMinutes: true,
         profileImageFile: {
           select: {
             s3Key: true,
@@ -605,7 +616,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: '꼼꼼함',
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       profileImageFile: {
         s3Key: 'profiles/profile.png',
       },
@@ -623,7 +634,7 @@ describe('PeopleService', () => {
         id: 'person-1',
         phoneNumber: '010-1234-5678',
         birthdayNotificationEnabled: true,
-        birthdayNotificationOffsetDays: 1,
+        birthdayNotificationOffsetMinutes: 1,
       })
       .mockResolvedValueOnce(updatedPerson);
 
@@ -688,7 +699,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       profileImageFile: null,
       extraContacts: [],
       businessCards: [],
@@ -698,7 +709,7 @@ describe('PeopleService', () => {
         id: 'person-1',
         phoneNumber: '010-1234-5678',
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: 1,
+        birthdayNotificationOffsetMinutes: 1,
       })
       .mockResolvedValueOnce(updatedPerson);
 
@@ -742,7 +753,7 @@ describe('PeopleService', () => {
         id: 'person-1',
         phoneNumber: '010-1234-5678',
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: 1,
+        birthdayNotificationOffsetMinutes: 1,
       })
       .mockResolvedValueOnce({ id: 'person-2' });
 
@@ -784,7 +795,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: true,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       profileImageFile: null,
       extraContacts: [],
       businessCards: [],
@@ -794,7 +805,7 @@ describe('PeopleService', () => {
         id: 'person-1',
         phoneNumber: '010-1234-5678',
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: 1,
+        birthdayNotificationOffsetMinutes: 1,
       })
       .mockResolvedValueOnce(updatedPerson);
 
@@ -866,7 +877,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       profileImageFile: {
         s3Key: 'profiles/new.png',
       },
@@ -983,7 +994,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       profileImageFile: {
         s3Key: 'profiles/new.jpg',
       },
@@ -1060,7 +1071,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       profileImageFile: null,
       extraContacts: [],
       businessCards: [],
@@ -1379,7 +1390,7 @@ describe('PeopleService', () => {
       relationship: '동료',
       personality: '꼼꼼함',
       birthdayNotificationEnabled: true,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
@@ -1399,7 +1410,7 @@ describe('PeopleService', () => {
           relationship: '동료',
           personality: '꼼꼼함',
           birthdayNotificationEnabled: true,
-          birthdayNotificationOffsetDays: 1,
+          birthdayNotificationOffsetMinutes: 1,
         },
         {},
       ),
@@ -1441,7 +1452,32 @@ describe('PeopleService', () => {
         relationship: '동료',
         personality: '꼼꼼함',
         birthdayNotificationEnabled: true,
-        birthdayNotificationOffsetDays: 1,
+        birthdayNotificationOffsetMinutes: 1,
+      },
+    });
+    expect(prisma.notificationJob.upsert).toHaveBeenCalledWith({
+      where: {
+        userId_dedupeKey: {
+          userId: 'user-1',
+          dedupeKey: 'birthday:person-1:2027',
+        },
+      },
+      create: {
+        userId: 'user-1',
+        type: 'BIRTHDAY',
+        personId: 'person-1',
+        scheduledAt: new Date('2026-12-31T23:59:00.000Z'),
+        dedupeKey: 'birthday:person-1:2027',
+      },
+      update: {
+        status: 'PENDING',
+        scheduledAt: new Date('2026-12-31T23:59:00.000Z'),
+        attemptCount: 0,
+        sentAt: null,
+        failedAt: null,
+        lastAttemptAt: null,
+        errorCode: null,
+        errorMessage: null,
       },
     });
   });
@@ -1501,7 +1537,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1440,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };
@@ -1613,7 +1649,7 @@ describe('PeopleService', () => {
         relationship: undefined,
         personality: undefined,
         birthdayNotificationEnabled: false,
-        birthdayNotificationOffsetDays: 1,
+        birthdayNotificationOffsetMinutes: 1440,
       },
     });
     expect(prisma.mediaFile.create).toHaveBeenNthCalledWith(2, {
@@ -1669,7 +1705,7 @@ describe('PeopleService', () => {
       relationship: null,
       personality: null,
       birthdayNotificationEnabled: false,
-      birthdayNotificationOffsetDays: 1,
+      birthdayNotificationOffsetMinutes: 1,
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       updatedAt: new Date('2026-06-25T00:00:00.000Z'),
     };

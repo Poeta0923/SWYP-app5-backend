@@ -169,7 +169,7 @@ export class UpdatePersonItemDto {
 
   @ApiPropertyOptional({
     description:
-      '생일 알림 여부. 알림 기준일은 birthdayNotificationOffsetDays에 저장된 값을 사용합니다.',
+      '생일 알림 여부. 알림 기준은 birthdayNotificationOffsetMinutes에 저장된 값을 사용합니다.',
     example: true,
   })
   @Transform(optionalBoolean)
@@ -178,15 +178,16 @@ export class UpdatePersonItemDto {
   birthdayNotificationEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: '생일 며칠 전 알림을 보낼지. 생략하면 기존 값을 유지합니다.',
-    example: 1,
+    description:
+      '생일 기준 몇 분 전에 알림을 보낼지. 생략하면 기존 값을 유지합니다.',
+    example: 1440,
     minimum: 0,
   })
   @Transform(optionalInteger)
   @ValidateIf(isDefined)
   @IsInt()
   @Min(0)
-  birthdayNotificationOffsetDays?: number;
+  birthdayNotificationOffsetMinutes?: number;
 
   @ApiPropertyOptional({
     description:
