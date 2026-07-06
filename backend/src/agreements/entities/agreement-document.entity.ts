@@ -13,7 +13,7 @@ export class AgreementDocumentEntity implements AgreementDocument {
 
   @ApiProperty({
     enum: AgreementType,
-    example: AgreementType.PRIVACY_REQUIRED,
+    example: AgreementType.PRIVACY_POLICY,
     description: '약관 유형',
   })
   type: AgreementType;

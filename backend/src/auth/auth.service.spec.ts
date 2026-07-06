@@ -203,10 +203,10 @@ describe('AuthService', () => {
         callOrder.push('load-agreement-statuses');
         return [
           {
-            type: 'TERMS',
+            type: 'TERMS_OF_SERVICE',
             documentId: 'agreement-document-id',
             version: '0.0.1',
-            title: '이용 약관 동의(필수)',
+            title: '이용약관',
             required: true,
             agreed: false,
           },
@@ -247,10 +247,10 @@ describe('AuthService', () => {
       },
       agreements: [
         {
-          type: 'TERMS',
+          type: 'TERMS_OF_SERVICE',
           documentId: 'agreement-document-id',
           version: '0.0.1',
-          title: '이용 약관 동의(필수)',
+          title: '이용약관',
           required: true,
           agreed: false,
         },
@@ -323,10 +323,10 @@ describe('AuthService', () => {
       },
       agreements: [
         {
-          type: 'TERMS',
+          type: 'TERMS_OF_SERVICE',
           documentId: 'agreement-document-id',
           version: '0.0.1',
-          title: '이용 약관 동의(필수)',
+          title: '이용약관',
           required: true,
           agreed: false,
         },
