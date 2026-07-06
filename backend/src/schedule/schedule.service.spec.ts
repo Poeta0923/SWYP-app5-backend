@@ -102,7 +102,7 @@ describe('ScheduleService', () => {
       scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
       content: '회의 준비',
       notificationEnabled: true,
-      reminderOffsetDays: 1,
+      reminderOffsetMinutes: 60,
       people: [
         {
           person: {
@@ -129,7 +129,7 @@ describe('ScheduleService', () => {
         scheduleTime: '2026-06-29T08:00:00.000Z',
         personIds: ['person-1', 'person-2'],
         notificationEnabled: true,
-        reminderOffsetDays: 1,
+        reminderOffsetMinutes: 60,
         content: '회의 준비',
         recordId: 'record-1',
       }),
@@ -151,7 +151,7 @@ describe('ScheduleService', () => {
       ],
       content: '회의 준비',
       notificationEnabled: true,
-      reminderOffsetDays: 1,
+      reminderOffsetMinutes: 60,
     });
 
     expect(prisma.person.findMany).toHaveBeenCalledWith({
@@ -182,7 +182,7 @@ describe('ScheduleService', () => {
         content: '회의 준비',
         scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
         notificationEnabled: true,
-        reminderOffsetDays: 1,
+        reminderOffsetMinutes: 60,
       },
       select: {
         id: true,
@@ -219,7 +219,7 @@ describe('ScheduleService', () => {
         userId: 'user-1',
         type: 'SCHEDULE',
         scheduleId: 'schedule-1',
-        scheduledAt: new Date('2026-06-28T08:00:00.000Z'),
+        scheduledAt: new Date('2026-06-29T07:00:00.000Z'),
         dedupeKey: 'schedule:schedule-1',
       },
     });
@@ -236,7 +236,7 @@ describe('ScheduleService', () => {
       scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
       content: null,
       notificationEnabled: false,
-      reminderOffsetDays: 0,
+      reminderOffsetMinutes: 0,
       people: [],
     });
 
@@ -246,14 +246,14 @@ describe('ScheduleService', () => {
         scheduleTime: '2026-06-29T08:00:00.000Z',
         personIds: [],
         notificationEnabled: false,
-        reminderOffsetDays: 0,
+        reminderOffsetMinutes: 0,
         content: null,
         recordId: null,
       }),
     ).resolves.toMatchObject({
       id: 'schedule-1',
       notificationEnabled: false,
-      reminderOffsetDays: 0,
+      reminderOffsetMinutes: 0,
     });
 
     expect(prisma.schedulePerson.createMany).not.toHaveBeenCalled();
@@ -271,7 +271,7 @@ describe('ScheduleService', () => {
         scheduleTime: '2026-06-29T08:00:00.000Z',
         personIds: ['person-1', 'missing-person'],
         notificationEnabled: false,
-        reminderOffsetDays: 0,
+        reminderOffsetMinutes: 0,
         content: null,
         recordId: null,
       }),
@@ -296,7 +296,7 @@ describe('ScheduleService', () => {
         scheduleTime: '2026-06-29T08:00:00.000Z',
         personIds: [],
         notificationEnabled: false,
-        reminderOffsetDays: 0,
+        reminderOffsetMinutes: 0,
         content: null,
         recordId: 'record-1',
       }),
@@ -320,7 +320,7 @@ describe('ScheduleService', () => {
         scheduleTime: new Date('2026-06-30T08:00:00.000Z'),
         content: '수정된 내용',
         notificationEnabled: true,
-        reminderOffsetDays: 2,
+        reminderOffsetMinutes: 120,
         people: [
           {
             person: {
@@ -344,7 +344,7 @@ describe('ScheduleService', () => {
         personIds: ['person-2'],
         content: '수정된 내용',
         notificationEnabled: true,
-        reminderOffsetDays: 2,
+        reminderOffsetMinutes: 120,
       }),
     ).resolves.toEqual({
       id: 'schedule-1',
@@ -359,7 +359,7 @@ describe('ScheduleService', () => {
       ],
       content: '수정된 내용',
       notificationEnabled: true,
-      reminderOffsetDays: 2,
+      reminderOffsetMinutes: 120,
     });
 
     expect(prisma.schedule.update).toHaveBeenCalledWith({
@@ -375,7 +375,7 @@ describe('ScheduleService', () => {
         scheduleTime: new Date('2026-06-30T08:00:00.000Z'),
         content: '수정된 내용',
         notificationEnabled: true,
-        reminderOffsetDays: 2,
+        reminderOffsetMinutes: 120,
       },
     });
     expect(prisma.schedulePerson.deleteMany).toHaveBeenCalledWith({
@@ -405,12 +405,12 @@ describe('ScheduleService', () => {
         userId: 'user-1',
         type: 'SCHEDULE',
         scheduleId: 'schedule-1',
-        scheduledAt: new Date('2026-06-28T08:00:00.000Z'),
+        scheduledAt: new Date('2026-06-30T06:00:00.000Z'),
         dedupeKey: 'schedule:schedule-1',
       },
       update: {
         status: 'PENDING',
-        scheduledAt: new Date('2026-06-28T08:00:00.000Z'),
+        scheduledAt: new Date('2026-06-30T06:00:00.000Z'),
         attemptCount: 0,
         sentAt: null,
         failedAt: null,
@@ -432,7 +432,7 @@ describe('ScheduleService', () => {
         scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
         content: null,
         notificationEnabled: false,
-        reminderOffsetDays: 1,
+        reminderOffsetMinutes: 60,
         people: [],
       });
 
@@ -469,7 +469,7 @@ describe('ScheduleService', () => {
         id: 'schedule-1',
         title: '오늘 미팅',
         scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
-        reminderOffsetDays: 0,
+        reminderOffsetMinutes: 0,
         people: [
           {
             person: {
@@ -493,7 +493,7 @@ describe('ScheduleService', () => {
         id: 'schedule-2',
         title: '내일 점심',
         scheduleTime: new Date('2026-06-30T03:00:00.000Z'),
-        reminderOffsetDays: 1,
+        reminderOffsetMinutes: 60,
         people: [],
       },
     ]);
@@ -516,7 +516,7 @@ describe('ScheduleService', () => {
         ],
         scheduleTime: '2026-06-29T08:00:00.000Z',
         dDay: 'D-0',
-        reminderOffsetDays: 0,
+        reminderOffsetMinutes: 0,
       },
       {
         id: 'schedule-2',
@@ -524,7 +524,7 @@ describe('ScheduleService', () => {
         people: [],
         scheduleTime: '2026-06-30T03:00:00.000Z',
         dDay: 'D-1',
-        reminderOffsetDays: 1,
+        reminderOffsetMinutes: 60,
       },
     ]);
 
@@ -539,7 +539,7 @@ describe('ScheduleService', () => {
         id: true,
         title: true,
         scheduleTime: true,
-        reminderOffsetDays: true,
+        reminderOffsetMinutes: true,
         people: {
           select: {
             person: {
@@ -581,7 +581,7 @@ describe('ScheduleService', () => {
       scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
       content: null,
       notificationEnabled: true,
-      reminderOffsetDays: 1,
+      reminderOffsetMinutes: 60,
       people: [
         {
           person: {
@@ -622,7 +622,7 @@ describe('ScheduleService', () => {
       ],
       content: null,
       notificationEnabled: true,
-      reminderOffsetDays: 1,
+      reminderOffsetMinutes: 60,
     });
 
     expect(prisma.schedule.findFirst).toHaveBeenCalledWith({
@@ -636,7 +636,7 @@ describe('ScheduleService', () => {
         scheduleTime: true,
         content: true,
         notificationEnabled: true,
-        reminderOffsetDays: true,
+        reminderOffsetMinutes: true,
         people: {
           select: {
             person: {

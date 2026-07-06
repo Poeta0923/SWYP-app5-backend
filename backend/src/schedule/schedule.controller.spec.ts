@@ -27,7 +27,7 @@ describe('ScheduleController', () => {
         people: [],
         content: null,
         notificationEnabled: true,
-        reminderOffsetDays: 1,
+        reminderOffsetMinutes: 60,
       }),
       getSchedules: jest.fn().mockResolvedValue([]),
       getScheduleDetail: jest.fn().mockResolvedValue({
@@ -37,7 +37,7 @@ describe('ScheduleController', () => {
         people: [],
         content: null,
         notificationEnabled: true,
-        reminderOffsetDays: 1,
+        reminderOffsetMinutes: 60,
       }),
       updateSchedule: jest.fn().mockResolvedValue({
         id: 'schedule-1',
@@ -46,7 +46,7 @@ describe('ScheduleController', () => {
         people: [],
         content: null,
         notificationEnabled: false,
-        reminderOffsetDays: 0,
+        reminderOffsetMinutes: 0,
       }),
     };
     controller = new ScheduleController(
@@ -96,7 +96,7 @@ describe('ScheduleController', () => {
       scheduleTime: '2026-06-29T08:00:00.000Z',
       personIds: ['person-1'],
       notificationEnabled: true,
-      reminderOffsetDays: 1,
+      reminderOffsetMinutes: 60,
       content: null,
       recordId: null,
     };
@@ -108,7 +108,7 @@ describe('ScheduleController', () => {
       people: [],
       content: null,
       notificationEnabled: true,
-      reminderOffsetDays: 1,
+      reminderOffsetMinutes: 60,
     });
 
     expect(Reflect.getMetadata(PATH_METADATA, createScheduleHandler)).toBe('/');
@@ -141,7 +141,7 @@ describe('ScheduleController', () => {
       people: [],
       content: null,
       notificationEnabled: true,
-      reminderOffsetDays: 1,
+      reminderOffsetMinutes: 60,
     });
 
     expect(Reflect.getMetadata(PATH_METADATA, getScheduleDetailHandler)).toBe(
@@ -183,7 +183,7 @@ describe('ScheduleController', () => {
       people: [],
       content: null,
       notificationEnabled: false,
-      reminderOffsetDays: 0,
+      reminderOffsetMinutes: 0,
     });
 
     expect(Reflect.getMetadata(PATH_METADATA, updateScheduleHandler)).toBe(

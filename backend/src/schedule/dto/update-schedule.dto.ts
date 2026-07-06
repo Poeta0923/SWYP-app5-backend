@@ -81,12 +81,12 @@ export class UpdateScheduleDto {
 
   @ApiPropertyOptional({
     description:
-      '일정 시작일 기준 며칠 전에 알림을 받을지 설정한 일수. 생략하면 기존 값을 유지합니다.',
-    example: 1,
+      '일정 시작 시각 기준 몇 분 전에 알림을 받을지 설정한 분 단위 값. 생략하면 기존 값을 유지합니다.',
+    example: 30,
     minimum: 0,
   })
   @ValidateIf(isDefined)
   @IsInt()
   @Min(0)
-  reminderOffsetDays?: number;
+  reminderOffsetMinutes?: number;
 }

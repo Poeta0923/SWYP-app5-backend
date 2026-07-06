@@ -321,16 +321,16 @@ model ExtraContact {
 }
 
 model Schedule {
-  id                  String            @id @default(cuid())
-  userId              String            @map("user_id")
-  title               String            @default("제목 없음")
-  content             String?
-  scheduleTime        DateTime          @map("schedule_time")
-  reminderOffsetDays  Int               @default(0) @map("reminder_offset_days")
-  notificationEnabled Boolean           @default(false) @map("notification_enabled")
-  people              SchedulePerson[]
-  notificationJobs    NotificationJob[]
-  record              Record?
+  id                    String            @id @default(cuid())
+  userId                String            @map("user_id")
+  title                 String            @default("제목 없음")
+  content               String?
+  scheduleTime          DateTime          @map("schedule_time")
+  reminderOffsetMinutes Int               @default(0) @map("reminder_offset_minutes")
+  notificationEnabled   Boolean           @default(false) @map("notification_enabled")
+  people                SchedulePerson[]
+  notificationJobs      NotificationJob[]
+  record                Record?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
