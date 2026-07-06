@@ -44,9 +44,9 @@ describe('AgreementsService', () => {
   it('returns active agreements with only the latest document of each type', async () => {
     const newerTermsDocument = {
       id: 'terms-v2-id',
-      type: AgreementType.TERMS,
+      type: AgreementType.TERMS_OF_SERVICE,
       version: '0.0.2',
-      title: '이용 약관 동의(필수)',
+      title: '이용약관',
       content: '테스트용 이용약관',
       contentHash: 'content-hash',
       required: true,
@@ -63,9 +63,9 @@ describe('AgreementsService', () => {
     };
     const marketingDocument = {
       ...newerTermsDocument,
-      id: 'marketing-email-id',
-      type: AgreementType.MARKETING_EMAIL,
-      title: 'E-mail 광고성 정보 수신동의(선택)',
+      id: 'marketing-communication-id',
+      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      title: '마케팅수신동의',
       required: false,
     };
     prisma.agreementDocument.findMany.mockResolvedValue([
@@ -99,9 +99,9 @@ describe('AgreementsService', () => {
   it('returns active agreement statuses for the latest document of each type', async () => {
     const newerTermsDocument = {
       id: 'terms-v2-id',
-      type: AgreementType.TERMS,
+      type: AgreementType.TERMS_OF_SERVICE,
       version: '0.0.2',
-      title: '이용 약관 동의(필수)',
+      title: '이용약관',
       content: '테스트용 이용약관',
       contentHash: 'content-hash',
       required: true,
@@ -118,9 +118,9 @@ describe('AgreementsService', () => {
     };
     const marketingDocument = {
       ...newerTermsDocument,
-      id: 'marketing-email-id',
-      type: AgreementType.MARKETING_EMAIL,
-      title: 'E-mail 광고성 정보 수신동의(선택)',
+      id: 'marketing-communication-id',
+      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      title: '마케팅수신동의',
       required: false,
     };
     prisma.agreementDocument.findMany.mockResolvedValue([
@@ -137,7 +137,7 @@ describe('AgreementsService', () => {
     await expect(service.getActiveAgreementStatuses('user-1')).resolves.toEqual(
       [
         {
-          type: AgreementType.MARKETING_EMAIL,
+          type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
           documentId: marketingDocument.id,
           version: marketingDocument.version,
           title: marketingDocument.title,
@@ -145,7 +145,7 @@ describe('AgreementsService', () => {
           agreed: false,
         },
         {
-          type: AgreementType.TERMS,
+          type: AgreementType.TERMS_OF_SERVICE,
           documentId: newerTermsDocument.id,
           version: newerTermsDocument.version,
           title: newerTermsDocument.title,
@@ -197,9 +197,9 @@ describe('AgreementsService', () => {
   it('returns true when the user agreed to all active required agreements', async () => {
     const requiredDocument = {
       id: 'terms-id',
-      type: AgreementType.TERMS,
+      type: AgreementType.TERMS_OF_SERVICE,
       version: '0.0.1',
-      title: '이용 약관 동의(필수)',
+      title: '이용약관',
       content: '테스트용 이용약관',
       contentHash: 'content-hash',
       required: true,
@@ -210,9 +210,9 @@ describe('AgreementsService', () => {
     };
     const optionalDocument = {
       ...requiredDocument,
-      id: 'marketing-email-id',
-      type: AgreementType.MARKETING_EMAIL,
-      title: 'E-mail 광고성 정보 수신동의(선택)',
+      id: 'marketing-communication-id',
+      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      title: '마케팅수신동의',
       required: false,
     };
     prisma.agreementDocument.findMany.mockResolvedValue([
@@ -245,9 +245,9 @@ describe('AgreementsService', () => {
   it('returns false when the user has not agreed to every active required agreement', async () => {
     const termsDocument = {
       id: 'terms-id',
-      type: AgreementType.TERMS,
+      type: AgreementType.TERMS_OF_SERVICE,
       version: '0.0.1',
-      title: '이용 약관 동의(필수)',
+      title: '이용약관',
       content: '테스트용 이용약관',
       contentHash: 'content-hash',
       required: true,
@@ -258,9 +258,9 @@ describe('AgreementsService', () => {
     };
     const privacyDocument = {
       ...termsDocument,
-      id: 'privacy-required-id',
-      type: AgreementType.PRIVACY_REQUIRED,
-      title: '개인정보 수집 및 이용동의(필수)',
+      id: 'privacy-policy-id',
+      type: AgreementType.PRIVACY_POLICY,
+      title: '개인정보처리방침',
     };
     prisma.agreementDocument.findMany.mockResolvedValue([
       privacyDocument,
@@ -280,10 +280,10 @@ describe('AgreementsService', () => {
   it('returns true when there are no active required agreements', async () => {
     prisma.agreementDocument.findMany.mockResolvedValue([
       {
-        id: 'marketing-email-id',
-        type: AgreementType.MARKETING_EMAIL,
+        id: 'marketing-communication-id',
+        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
         version: '0.0.1',
-        title: 'E-mail 광고성 정보 수신동의(선택)',
+        title: '마케팅수신동의',
         content: '테스트용 이용약관',
         contentHash: 'content-hash',
         required: false,
@@ -304,9 +304,9 @@ describe('AgreementsService', () => {
   it('stores agreement consent events and returns updated active agreement statuses', async () => {
     const termsDocument = {
       id: 'terms-id',
-      type: AgreementType.TERMS,
+      type: AgreementType.TERMS_OF_SERVICE,
       version: '0.0.1',
-      title: '이용 약관 동의(필수)',
+      title: '이용약관',
       content: '테스트용 이용약관',
       contentHash: 'content-hash',
       required: true,
@@ -317,9 +317,9 @@ describe('AgreementsService', () => {
     };
     const marketingDocument = {
       ...termsDocument,
-      id: 'marketing-email-id',
-      type: AgreementType.MARKETING_EMAIL,
-      title: 'E-mail 광고성 정보 수신동의(선택)',
+      id: 'marketing-communication-id',
+      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      title: '마케팅수신동의',
       required: false,
     };
     prisma.agreementDocument.findMany.mockResolvedValue([
@@ -347,7 +347,7 @@ describe('AgreementsService', () => {
       }),
     ).resolves.toEqual([
       {
-        type: AgreementType.MARKETING_EMAIL,
+        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
         documentId: marketingDocument.id,
         version: marketingDocument.version,
         title: marketingDocument.title,
@@ -355,7 +355,7 @@ describe('AgreementsService', () => {
         agreed: true,
       },
       {
-        type: AgreementType.TERMS,
+        type: AgreementType.TERMS_OF_SERVICE,
         documentId: termsDocument.id,
         version: termsDocument.version,
         title: termsDocument.title,
@@ -399,9 +399,9 @@ describe('AgreementsService', () => {
     prisma.agreementDocument.findMany.mockResolvedValue([
       {
         id: 'terms-id',
-        type: AgreementType.TERMS,
+        type: AgreementType.TERMS_OF_SERVICE,
         version: '0.0.1',
-        title: '이용 약관 동의(필수)',
+        title: '이용약관',
         content: '테스트용 이용약관',
         contentHash: 'content-hash',
         required: true,

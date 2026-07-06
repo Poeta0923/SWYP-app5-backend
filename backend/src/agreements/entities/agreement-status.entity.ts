@@ -5,7 +5,7 @@ import type { AgreementStatusResponse } from '../agreements.service';
 export class AgreementStatusEntity implements AgreementStatusResponse {
   @ApiProperty({
     enum: AgreementType,
-    example: AgreementType.TERMS,
+    example: AgreementType.TERMS_OF_SERVICE,
     description: '약관 유형',
   })
   type: AgreementType;
