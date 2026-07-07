@@ -10,6 +10,7 @@ interface PrismaMock {
     update: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
+    deleteMany: jest.Mock;
   };
   schedulePerson: {
     createMany: jest.Mock;
@@ -21,11 +22,13 @@ interface PrismaMock {
   record: {
     findFirst: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
   notificationJob: {
     create: jest.Mock;
     updateMany: jest.Mock;
     upsert: jest.Mock;
+    deleteMany: jest.Mock;
   };
 }
 
@@ -47,6 +50,7 @@ describe('ScheduleService', () => {
         update: jest.fn(),
         findMany: jest.fn(),
         findFirst: jest.fn(),
+        deleteMany: jest.fn(),
       },
       schedulePerson: {
         createMany: jest.fn(),
@@ -58,11 +62,13 @@ describe('ScheduleService', () => {
       record: {
         findFirst: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       notificationJob: {
         create: jest.fn(),
         updateMany: jest.fn(),
         upsert: jest.fn(),
+        deleteMany: jest.fn(),
       },
     };
     s3Service = {
@@ -453,6 +459,76 @@ describe('ScheduleService', () => {
     expect(prisma.notificationJob.upsert).not.toHaveBeenCalled();
   });
 
+  it('deletes a schedule, related jobs and people links, and unlinks records', async () => {
+    prisma.schedule.findFirst.mockResolvedValue({
+      id: 'schedule-1',
+    });
+    prisma.schedule.deleteMany.mockResolvedValue({
+      count: 1,
+    });
+
+    await expect(
+      service.deleteSchedule('user-1', 'schedule-1'),
+    ).resolves.toEqual({
+      success: true,
+    });
+
+    expect(prisma.schedule.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'schedule-1',
+        userId: 'user-1',
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.notificationJob.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        scheduleId: 'schedule-1',
+      },
+    });
+    expect(prisma.schedulePerson.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        scheduleId: 'schedule-1',
+      },
+    });
+    expect(prisma.record.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        scheduleId: 'schedule-1',
+      },
+      data: {
+        scheduleId: null,
+      },
+    });
+    expect(prisma.schedule.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'schedule-1',
+        userId: 'user-1',
+      },
+    });
+  });
+
+  it('throws not found when deleting a missing schedule', async () => {
+    prisma.schedule.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.deleteSchedule('user-1', 'missing-schedule'),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'SCHEDULE_NOT_FOUND',
+        scheduleId: 'missing-schedule',
+      },
+    });
+
+    expect(prisma.notificationJob.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.schedulePerson.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.record.updateMany).not.toHaveBeenCalled();
+    expect(prisma.schedule.deleteMany).not.toHaveBeenCalled();
+  });
+
   it('throws bad request when update payload is empty', async () => {
     await expect(
       service.updateSchedule('user-1', 'schedule-1', {}),
@@ -563,9 +639,7 @@ describe('ScheduleService', () => {
       },
       orderBy: { scheduleTime: Prisma.SortOrder.asc },
     });
-    expect(s3Service.getSignedUrl).toHaveBeenCalledWith(
-      'profiles/profile.png',
-    );
+    expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
   });
 
   it('returns an empty array when there are no upcoming schedules', async () => {
