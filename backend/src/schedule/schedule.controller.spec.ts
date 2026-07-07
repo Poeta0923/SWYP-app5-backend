@@ -15,6 +15,7 @@ describe('ScheduleController', () => {
     getSchedules: jest.Mock;
     getScheduleDetail: jest.Mock;
     updateSchedule: jest.Mock;
+    deleteSchedule: jest.Mock;
   };
   let controller: ScheduleController;
 
@@ -47,6 +48,9 @@ describe('ScheduleController', () => {
         content: null,
         notificationEnabled: false,
         reminderOffsetMinutes: 0,
+      }),
+      deleteSchedule: jest.fn().mockResolvedValue({
+        success: true,
       }),
     };
     controller = new ScheduleController(
@@ -199,6 +203,37 @@ describe('ScheduleController', () => {
       'user-1',
       'schedule-1',
       dto,
+    );
+  });
+
+  it('registers DELETE /schedule behind auth and required agreements guards', async () => {
+    const deleteScheduleHandler = Object.getOwnPropertyDescriptor(
+      ScheduleController.prototype,
+      'deleteSchedule',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const dto = {
+      scheduleId: 'schedule-1',
+    };
+
+    await expect(controller.deleteSchedule(currentUser, dto)).resolves.toEqual({
+      success: true,
+    });
+
+    expect(Reflect.getMetadata(PATH_METADATA, deleteScheduleHandler)).toBe('/');
+    expect(Reflect.getMetadata(METHOD_METADATA, deleteScheduleHandler)).toBe(
+      RequestMethod.DELETE,
+    );
+    expect(Reflect.getMetadata(GUARDS_METADATA, deleteScheduleHandler)).toEqual(
+      [JwtAuthGuard, RequiredAgreementsGuard],
+    );
+    expect(scheduleService.deleteSchedule).toHaveBeenCalledWith(
+      'user-1',
+      'schedule-1',
     );
   });
 });

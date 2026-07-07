@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -24,6 +25,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { DeleteScheduleDto } from './dto/delete-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import {
   ScheduleDetailEntity,
@@ -150,5 +152,41 @@ export class ScheduleController {
       scheduleId,
       dto,
     );
+  }
+
+  @Delete()
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '일정 삭제',
+    description:
+      '현재 사용자의 일정을 삭제하고, 연결된 인물 관계와 알림 job을 함께 정리합니다.',
+  })
+  @ApiBody({ type: DeleteScheduleDto })
+  @ApiOkResponse({
+    description: '일정 삭제 성공',
+    schema: {
+      example: {
+        success: true,
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '일정을 찾을 수 없음',
+  })
+  deleteSchedule(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Body() dto: DeleteScheduleDto,
+  ) {
+    return this.scheduleService.deleteSchedule(currentUser.sub, dto.scheduleId);
   }
 }

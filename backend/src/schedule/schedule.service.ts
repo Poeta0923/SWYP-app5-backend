@@ -41,6 +41,10 @@ export interface ScheduleDetailResponse {
   reminderOffsetMinutes: number;
 }
 
+export interface DeleteScheduleResult {
+  success: true;
+}
+
 type ScheduleProfileImageFile = {
   s3Key: string;
 };
@@ -331,6 +335,74 @@ export class ScheduleService {
     }
 
     return this.toScheduleDetailResponse(updatedSchedule);
+  }
+
+  async deleteSchedule(
+    userId: string,
+    scheduleId: string,
+  ): Promise<DeleteScheduleResult> {
+    const existingSchedule = await this.prisma.schedule.findFirst({
+      where: {
+        id: scheduleId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existingSchedule) {
+      throw new NotFoundException({
+        code: 'SCHEDULE_NOT_FOUND',
+        message: '삭제할 일정을 찾을 수 없습니다.',
+        scheduleId,
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.notificationJob.deleteMany({
+        where: {
+          userId,
+          scheduleId,
+        },
+      });
+
+      await tx.schedulePerson.deleteMany({
+        where: {
+          userId,
+          scheduleId,
+        },
+      });
+
+      await tx.record.updateMany({
+        where: {
+          userId,
+          scheduleId,
+        },
+        data: {
+          scheduleId: null,
+        },
+      });
+
+      const deleteResult = await tx.schedule.deleteMany({
+        where: {
+          id: scheduleId,
+          userId,
+        },
+      });
+
+      if (deleteResult.count !== 1) {
+        throw new NotFoundException({
+          code: 'SCHEDULE_NOT_FOUND',
+          message: '삭제할 일정을 찾을 수 없습니다.',
+          scheduleId,
+        });
+      }
+    });
+
+    return {
+      success: true,
+    };
   }
 
   private toScheduleDetailResponse(schedule: {
