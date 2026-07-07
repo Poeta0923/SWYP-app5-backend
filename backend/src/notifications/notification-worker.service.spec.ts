@@ -7,10 +7,14 @@ import { FcmNotificationService } from './fcm-notification.service';
 import { NotificationWorkerService } from './notification-worker.service';
 
 interface PrismaMock {
+  $transaction: jest.Mock;
   notificationJob: {
     findMany: jest.Mock;
     update: jest.Mock;
     upsert: jest.Mock;
+  };
+  notification: {
+    create: jest.Mock;
   };
 }
 
@@ -25,10 +29,16 @@ describe('NotificationWorkerService', () => {
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-05T12:00:00.000Z'));
     prisma = {
+      $transaction: jest.fn(async (callback: (tx: PrismaMock) => unknown) =>
+        callback(prisma),
+      ),
       notificationJob: {
         findMany: jest.fn(),
         update: jest.fn(),
         upsert: jest.fn(),
+      },
+      notification: {
+        create: jest.fn(),
       },
     };
     fcmNotificationService = {
@@ -115,6 +125,22 @@ describe('NotificationWorkerService', () => {
       title: '오늘 미팅',
       body: expect.stringContaining('일정이 예정되어 있습니다.'),
     });
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        type: NotificationType.SCHEDULE,
+        title: '오늘 미팅',
+        body: expect.stringContaining('일정이 예정되어 있습니다.'),
+        data: {
+          type: NotificationType.SCHEDULE,
+          scheduleId: 'schedule-1',
+        },
+        notificationJobId: 'job-1',
+        scheduleId: 'schedule-1',
+        personId: null,
+        sentAt: new Date('2026-07-05T12:00:00.000Z'),
+      },
+    });
     expect(prisma.notificationJob.update).toHaveBeenCalledWith({
       where: {
         id: 'job-1',
@@ -158,6 +184,7 @@ describe('NotificationWorkerService', () => {
 
     await service.processDueScheduleNotifications();
 
+    expect(prisma.notification.create).not.toHaveBeenCalled();
     expect(prisma.notificationJob.update).toHaveBeenCalledWith({
       where: {
         id: 'job-1',
@@ -193,6 +220,7 @@ describe('NotificationWorkerService', () => {
     expect(
       fcmNotificationService.sendScheduleNotification,
     ).not.toHaveBeenCalled();
+    expect(prisma.notification.create).not.toHaveBeenCalled();
     expect(prisma.notificationJob.update).toHaveBeenCalledWith({
       where: {
         id: 'job-1',
@@ -243,6 +271,22 @@ describe('NotificationWorkerService', () => {
       personId: 'person-1',
       title: '홍길동님 생일',
       body: '오늘은 홍길동님의 생일입니다.',
+    });
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        type: NotificationType.BIRTHDAY,
+        title: '홍길동님 생일',
+        body: '오늘은 홍길동님의 생일입니다.',
+        data: {
+          type: NotificationType.BIRTHDAY,
+          personId: 'person-1',
+        },
+        notificationJobId: 'job-1',
+        scheduleId: null,
+        personId: 'person-1',
+        sentAt: new Date('2026-07-05T12:00:00.000Z'),
+      },
     });
     expect(prisma.notificationJob.update).toHaveBeenCalledWith({
       where: {

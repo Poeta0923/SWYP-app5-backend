@@ -31,6 +31,19 @@ type DueNotificationJob = {
   } | null;
 };
 
+type SentNotificationParams = {
+  attemptedAt: Date;
+  title: string;
+  body: string;
+  data: Record<string, string>;
+  scheduleId?: string;
+  personId?: string;
+  result: {
+    errorCode: string | null;
+    errorMessage: string | null;
+  };
+};
+
 @Injectable()
 export class NotificationWorkerService {
   private isProcessing = false;
@@ -118,29 +131,28 @@ export class NotificationWorkerService {
       return;
     }
 
+    const title = job.schedule.title;
+    const body = this.toScheduleNotificationBody(job.schedule.scheduleTime);
+    const data = {
+      type: NotificationType.SCHEDULE,
+      scheduleId: job.schedule.id,
+    };
+
     const result = await this.fcmNotificationService.sendScheduleNotification({
       userId: job.userId,
       scheduleId: job.schedule.id,
-      title: job.schedule.title,
-      body: this.toScheduleNotificationBody(job.schedule.scheduleTime),
+      title,
+      body,
     });
 
     if (result.successCount > 0) {
-      await this.prisma.notificationJob.update({
-        where: {
-          id: job.id,
-        },
-        data: {
-          status: NotificationStatus.SENT,
-          attemptCount: {
-            increment: 1,
-          },
-          sentAt: attemptedAt,
-          failedAt: null,
-          lastAttemptAt: attemptedAt,
-          errorCode: result.errorCode,
-          errorMessage: result.errorMessage,
-        },
+      await this.markJobSentAndCreateNotification(job, {
+        attemptedAt,
+        title,
+        body,
+        data,
+        scheduleId: job.schedule.id,
+        result,
       });
       return;
     }
@@ -177,6 +189,44 @@ export class NotificationWorkerService {
     });
   }
 
+  private async markJobSentAndCreateNotification(
+    job: Pick<DueNotificationJob, 'id' | 'userId' | 'type'>,
+    params: SentNotificationParams,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.notification.create({
+        data: {
+          userId: job.userId,
+          type: job.type,
+          title: params.title,
+          body: params.body,
+          data: params.data,
+          notificationJobId: job.id,
+          scheduleId: params.scheduleId ?? null,
+          personId: params.personId ?? null,
+          sentAt: params.attemptedAt,
+        },
+      });
+
+      await tx.notificationJob.update({
+        where: {
+          id: job.id,
+        },
+        data: {
+          status: NotificationStatus.SENT,
+          attemptCount: {
+            increment: 1,
+          },
+          sentAt: params.attemptedAt,
+          failedAt: null,
+          lastAttemptAt: params.attemptedAt,
+          errorCode: params.result.errorCode,
+          errorMessage: params.result.errorMessage,
+        },
+      });
+    });
+  }
+
   private toScheduleNotificationBody(scheduleTime: Date): string {
     return `${scheduleTime.toLocaleString('ko-KR', {
       timeZone: 'Asia/Seoul',
@@ -199,29 +249,28 @@ export class NotificationWorkerService {
       return;
     }
 
+    const title = `${job.person.name}님 생일`;
+    const body = this.toBirthdayNotificationBody(job.person.name);
+    const data = {
+      type: NotificationType.BIRTHDAY,
+      personId: job.person.id,
+    };
+
     const result = await this.fcmNotificationService.sendBirthdayNotification({
       userId: job.userId,
       personId: job.person.id,
-      title: `${job.person.name}님 생일`,
-      body: this.toBirthdayNotificationBody(job.person.name),
+      title,
+      body,
     });
 
     if (result.successCount > 0) {
-      await this.prisma.notificationJob.update({
-        where: {
-          id: job.id,
-        },
-        data: {
-          status: NotificationStatus.SENT,
-          attemptCount: {
-            increment: 1,
-          },
-          sentAt: attemptedAt,
-          failedAt: null,
-          lastAttemptAt: attemptedAt,
-          errorCode: result.errorCode,
-          errorMessage: result.errorMessage,
-        },
+      await this.markJobSentAndCreateNotification(job, {
+        attemptedAt,
+        title,
+        body,
+        data,
+        personId: job.person.id,
+        result,
       });
       await this.scheduleNextBirthdayNotificationJob(job, job.person);
       return;
