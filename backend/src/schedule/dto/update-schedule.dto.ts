@@ -72,6 +72,14 @@ export class UpdateScheduleDto {
   content?: string | null;
 
   @ApiPropertyOptional({
+    description: '일정 북마크 여부. 생략하면 기존 값을 유지합니다.',
+    example: false,
+  })
+  @ValidateIf(isDefined)
+  @IsBoolean()
+  bookMark?: boolean;
+
+  @ApiPropertyOptional({
     description: '일정 알림 활성화 여부. 생략하면 기존 값을 유지합니다.',
     example: true,
   })

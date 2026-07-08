@@ -329,6 +329,7 @@ model Schedule {
   title                 String            @default("제목 없음")
   content               String?
   scheduleTime          DateTime          @map("schedule_time")
+  bookMark              Boolean           @default(false) @map("book_mark")
   reminderOffsetMinutes Int               @default(0) @map("reminder_offset_minutes")
   notificationEnabled   Boolean           @default(false) @map("notification_enabled")
   people                SchedulePerson[]

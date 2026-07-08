@@ -27,6 +27,7 @@ export interface ScheduleListItemResponse {
   title: string;
   people: SchedulePersonResponse[];
   scheduleTime: string;
+  bookMark: boolean;
   dDay: string;
   reminderOffsetMinutes: number;
 }
@@ -37,6 +38,7 @@ export interface ScheduleDetailResponse {
   scheduleTime: string;
   people: SchedulePersonResponse[];
   content: string | null;
+  bookMark: boolean;
   notificationEnabled: boolean;
   reminderOffsetMinutes: number;
 }
@@ -151,6 +153,7 @@ export class ScheduleService {
         id: true,
         title: true,
         scheduleTime: true,
+        bookMark: true,
         reminderOffsetMinutes: true,
         people: {
           select: {
@@ -173,7 +176,10 @@ export class ScheduleService {
           },
         },
       },
-      orderBy: { scheduleTime: Prisma.SortOrder.asc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { scheduleTime: Prisma.SortOrder.asc },
+      ],
     });
 
     return schedules.map((schedule) => ({
@@ -183,6 +189,7 @@ export class ScheduleService {
         this.toSchedulePersonResponse(person),
       ),
       scheduleTime: schedule.scheduleTime.toISOString(),
+      bookMark: schedule.bookMark,
       dDay: this.toDDay(now, schedule.scheduleTime),
       reminderOffsetMinutes: schedule.reminderOffsetMinutes,
     }));
@@ -223,6 +230,7 @@ export class ScheduleService {
       !this.hasOwn(item, 'scheduleTime') &&
       !this.hasOwn(item, 'personIds') &&
       !this.hasOwn(item, 'content') &&
+      !this.hasOwn(item, 'bookMark') &&
       !this.hasOwn(item, 'notificationEnabled') &&
       !this.hasOwn(item, 'reminderOffsetMinutes')
     ) {
@@ -269,6 +277,10 @@ export class ScheduleService {
 
       if (this.hasOwn(item, 'content')) {
         scheduleUpdateData.content = item.content ?? null;
+      }
+
+      if (this.hasOwn(item, 'bookMark')) {
+        scheduleUpdateData.bookMark = item.bookMark;
       }
 
       if (this.hasOwn(item, 'notificationEnabled')) {
@@ -417,6 +429,7 @@ export class ScheduleService {
       };
     }[];
     content: string | null;
+    bookMark: boolean;
     notificationEnabled: boolean;
     reminderOffsetMinutes: number;
   }): ScheduleDetailResponse {
@@ -428,6 +441,7 @@ export class ScheduleService {
         this.toSchedulePersonResponse(person),
       ),
       content: schedule.content,
+      bookMark: schedule.bookMark,
       notificationEnabled: schedule.notificationEnabled,
       reminderOffsetMinutes: schedule.reminderOffsetMinutes,
     };
@@ -439,6 +453,7 @@ export class ScheduleService {
       title: true,
       scheduleTime: true,
       content: true,
+      bookMark: true,
       notificationEnabled: true,
       reminderOffsetMinutes: true,
       people: {

@@ -107,6 +107,7 @@ describe('ScheduleService', () => {
       title: '오늘 미팅',
       scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
       content: '회의 준비',
+      bookMark: false,
       notificationEnabled: true,
       reminderOffsetMinutes: 60,
       people: [
@@ -156,6 +157,7 @@ describe('ScheduleService', () => {
         },
       ],
       content: '회의 준비',
+      bookMark: false,
       notificationEnabled: true,
       reminderOffsetMinutes: 60,
     });
@@ -241,6 +243,7 @@ describe('ScheduleService', () => {
       title: '오늘 미팅',
       scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
       content: null,
+      bookMark: false,
       notificationEnabled: false,
       reminderOffsetMinutes: 0,
       people: [],
@@ -325,6 +328,7 @@ describe('ScheduleService', () => {
         title: '수정된 미팅',
         scheduleTime: new Date('2026-06-30T08:00:00.000Z'),
         content: '수정된 내용',
+        bookMark: true,
         notificationEnabled: true,
         reminderOffsetMinutes: 120,
         people: [
@@ -349,6 +353,7 @@ describe('ScheduleService', () => {
         scheduleTime: '2026-06-30T08:00:00.000Z',
         personIds: ['person-2'],
         content: '수정된 내용',
+        bookMark: true,
         notificationEnabled: true,
         reminderOffsetMinutes: 120,
       }),
@@ -364,6 +369,7 @@ describe('ScheduleService', () => {
         },
       ],
       content: '수정된 내용',
+      bookMark: true,
       notificationEnabled: true,
       reminderOffsetMinutes: 120,
     });
@@ -380,6 +386,7 @@ describe('ScheduleService', () => {
         title: '수정된 미팅',
         scheduleTime: new Date('2026-06-30T08:00:00.000Z'),
         content: '수정된 내용',
+        bookMark: true,
         notificationEnabled: true,
         reminderOffsetMinutes: 120,
       },
@@ -437,6 +444,7 @@ describe('ScheduleService', () => {
         title: '오늘 미팅',
         scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
         content: null,
+        bookMark: false,
         notificationEnabled: false,
         reminderOffsetMinutes: 60,
         people: [],
@@ -457,6 +465,47 @@ describe('ScheduleService', () => {
       },
     });
     expect(prisma.notificationJob.upsert).not.toHaveBeenCalled();
+  });
+
+  it('updates only schedule bookmark', async () => {
+    prisma.schedule.findFirst
+      .mockResolvedValueOnce({
+        id: 'schedule-1',
+      })
+      .mockResolvedValueOnce({
+        id: 'schedule-1',
+        title: '오늘 미팅',
+        scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
+        content: null,
+        bookMark: true,
+        notificationEnabled: false,
+        reminderOffsetMinutes: 60,
+        people: [],
+      });
+
+    await expect(
+      service.updateSchedule('user-1', 'schedule-1', {
+        bookMark: true,
+      }),
+    ).resolves.toMatchObject({
+      id: 'schedule-1',
+      bookMark: true,
+    });
+
+    expect(prisma.schedule.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'schedule-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        updatedAt: new Date('2026-06-29T01:00:00.000Z'),
+        bookMark: true,
+      },
+    });
+    expect(prisma.schedulePerson.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.schedulePerson.createMany).not.toHaveBeenCalled();
   });
 
   it('deletes a schedule, related jobs and people links, and unlinks records', async () => {
@@ -545,6 +594,7 @@ describe('ScheduleService', () => {
         id: 'schedule-1',
         title: '오늘 미팅',
         scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
+        bookMark: false,
         reminderOffsetMinutes: 0,
         people: [
           {
@@ -569,6 +619,7 @@ describe('ScheduleService', () => {
         id: 'schedule-2',
         title: '내일 점심',
         scheduleTime: new Date('2026-06-30T03:00:00.000Z'),
+        bookMark: true,
         reminderOffsetMinutes: 60,
         people: [],
       },
@@ -591,6 +642,7 @@ describe('ScheduleService', () => {
           },
         ],
         scheduleTime: '2026-06-29T08:00:00.000Z',
+        bookMark: false,
         dDay: 'D-0',
         reminderOffsetMinutes: 0,
       },
@@ -599,6 +651,7 @@ describe('ScheduleService', () => {
         title: '내일 점심',
         people: [],
         scheduleTime: '2026-06-30T03:00:00.000Z',
+        bookMark: true,
         dDay: 'D-1',
         reminderOffsetMinutes: 60,
       },
@@ -615,6 +668,7 @@ describe('ScheduleService', () => {
         id: true,
         title: true,
         scheduleTime: true,
+        bookMark: true,
         reminderOffsetMinutes: true,
         people: {
           select: {
@@ -637,7 +691,10 @@ describe('ScheduleService', () => {
           },
         },
       },
-      orderBy: { scheduleTime: Prisma.SortOrder.asc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { scheduleTime: Prisma.SortOrder.asc },
+      ],
     });
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
   });
@@ -654,6 +711,7 @@ describe('ScheduleService', () => {
       title: '오늘 미팅',
       scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
       content: null,
+      bookMark: true,
       notificationEnabled: true,
       reminderOffsetMinutes: 60,
       people: [
@@ -695,6 +753,7 @@ describe('ScheduleService', () => {
         },
       ],
       content: null,
+      bookMark: true,
       notificationEnabled: true,
       reminderOffsetMinutes: 60,
     });
@@ -709,6 +768,7 @@ describe('ScheduleService', () => {
         title: true,
         scheduleTime: true,
         content: true,
+        bookMark: true,
         notificationEnabled: true,
         reminderOffsetMinutes: true,
         people: {
