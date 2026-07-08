@@ -506,6 +506,50 @@ describe('ScheduleService', () => {
     });
     expect(prisma.schedulePerson.deleteMany).not.toHaveBeenCalled();
     expect(prisma.schedulePerson.createMany).not.toHaveBeenCalled();
+    expect(prisma.notificationJob.updateMany).not.toHaveBeenCalled();
+    expect(prisma.notificationJob.upsert).not.toHaveBeenCalled();
+  });
+
+  it('does not reschedule notification job when only bookmark changes', async () => {
+    prisma.schedule.findFirst
+      .mockResolvedValueOnce({
+        id: 'schedule-1',
+      })
+      .mockResolvedValueOnce({
+        id: 'schedule-1',
+        title: '오늘 미팅',
+        scheduleTime: new Date('2026-06-29T08:00:00.000Z'),
+        content: null,
+        bookMark: true,
+        notificationEnabled: true,
+        reminderOffsetMinutes: 60,
+        people: [],
+      });
+
+    await expect(
+      service.updateSchedule('user-1', 'schedule-1', {
+        bookMark: true,
+      }),
+    ).resolves.toMatchObject({
+      id: 'schedule-1',
+      bookMark: true,
+      notificationEnabled: true,
+    });
+
+    expect(prisma.schedule.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'schedule-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        updatedAt: new Date('2026-06-29T01:00:00.000Z'),
+        bookMark: true,
+      },
+    });
+    expect(prisma.notificationJob.updateMany).not.toHaveBeenCalled();
+    expect(prisma.notificationJob.upsert).not.toHaveBeenCalled();
   });
 
   it('deletes a schedule, related jobs and people links, and unlinks records', async () => {
