@@ -101,6 +101,7 @@ describe('RecordService', () => {
         type: RecordType.VOICE,
         title: '통화 녹음',
         createdAt: new Date('2026-07-02T01:00:00.000Z'),
+        bookMark: true,
         voiceDurationSeconds: 65,
         people: [
           {
@@ -120,6 +121,7 @@ describe('RecordService', () => {
         type: RecordType.TEXT,
         title: '메모',
         createdAt: new Date('2026-07-01T01:00:00.000Z'),
+        bookMark: false,
         voiceDurationSeconds: null,
         people: [],
       },
@@ -132,6 +134,7 @@ describe('RecordService', () => {
         title: '통화 녹음',
         people: ['김영희', '홍길동'],
         createdAt: '2026-07-02T01:00:00.000Z',
+        bookMark: true,
         voiceDuration: '01:05',
       },
       {
@@ -140,6 +143,7 @@ describe('RecordService', () => {
         title: '메모',
         people: [],
         createdAt: '2026-07-01T01:00:00.000Z',
+        bookMark: false,
         voiceDuration: null,
       },
     ]);
@@ -151,6 +155,7 @@ describe('RecordService', () => {
         type: true,
         title: true,
         createdAt: true,
+        bookMark: true,
         voiceDurationSeconds: true,
         people: {
           select: {
@@ -167,7 +172,10 @@ describe('RecordService', () => {
           },
         },
       },
-      orderBy: { createdAt: Prisma.SortOrder.desc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { createdAt: Prisma.SortOrder.desc },
+      ],
     });
   });
 
@@ -185,6 +193,7 @@ describe('RecordService', () => {
       title: '미팅 기록',
       createdAt: new Date('2026-07-02T01:00:00.000Z'),
       content: '회의 내용',
+      bookMark: false,
       people: [
         {
           person: {
@@ -216,6 +225,7 @@ describe('RecordService', () => {
       title: '미팅 기록',
       createdAt: '2026-07-02T01:00:00.000Z',
       content: '회의 내용',
+      bookMark: false,
       people: [
         {
           id: 'person-2',
@@ -279,6 +289,7 @@ describe('RecordService', () => {
         title: true,
         createdAt: true,
         content: true,
+        bookMark: true,
         people: {
           select: {
             person: {
@@ -327,6 +338,7 @@ describe('RecordService', () => {
       title: '미팅 기록',
       createdAt: new Date('2026-07-02T01:00:00.000Z'),
       content: '회의 내용',
+      bookMark: true,
       people: [
         {
           person: {
@@ -368,6 +380,7 @@ describe('RecordService', () => {
       title: '미팅 기록',
       createdAt: '2026-07-02T01:00:00.000Z',
       content: '회의 내용',
+      bookMark: true,
       people: [
         {
           id: 'person-2',
@@ -408,6 +421,7 @@ describe('RecordService', () => {
         title: true,
         createdAt: true,
         content: true,
+        bookMark: true,
         people: {
           select: {
             person: {
@@ -481,6 +495,7 @@ describe('RecordService', () => {
         title: '수정된 미팅 기록',
         createdAt: new Date('2026-07-02T01:00:00.000Z'),
         content: '수정된 회의 내용',
+        bookMark: true,
         people: [
           {
             person: {
@@ -514,12 +529,14 @@ describe('RecordService', () => {
         title: '수정된 미팅 기록',
         content: '수정된 회의 내용',
         personIds: ['person-1', 'person-2'],
+        bookMark: true,
       }),
     ).resolves.toEqual({
       recordId: 'record-1',
       title: '수정된 미팅 기록',
       createdAt: '2026-07-02T01:00:00.000Z',
       content: '수정된 회의 내용',
+      bookMark: true,
       people: [
         {
           id: 'person-2',
@@ -568,6 +585,7 @@ describe('RecordService', () => {
         updatedAt: expect.any(Date) as Date,
         title: '수정된 미팅 기록',
         content: '수정된 회의 내용',
+        bookMark: true,
       },
     });
     expect(prisma.recordPerson.deleteMany).toHaveBeenCalledWith({
@@ -602,6 +620,7 @@ describe('RecordService', () => {
         title: true,
         createdAt: true,
         content: true,
+        bookMark: true,
         people: {
           select: {
             person: {
@@ -661,6 +680,7 @@ describe('RecordService', () => {
         title: '미팅 기록',
         createdAt: new Date('2026-07-02T01:00:00.000Z'),
         content: '회의 내용',
+        bookMark: false,
         people: [],
         schedule: null,
       });
@@ -676,6 +696,7 @@ describe('RecordService', () => {
       title: '미팅 기록',
       createdAt: '2026-07-02T01:00:00.000Z',
       content: '회의 내용',
+      bookMark: false,
       people: [],
       schedule: null,
     });
@@ -730,6 +751,7 @@ describe('RecordService', () => {
       title: '통화 녹음',
       createdAt: new Date('2026-07-02T01:00:00.000Z'),
       content: '회의 내용 전문',
+      bookMark: true,
       people: [
         {
           person: {
@@ -793,6 +815,7 @@ describe('RecordService', () => {
         ],
         recordKeywords: ['미팅', '후속 액션'],
         content: '회의 내용 전문',
+        bookMark: true,
         recordMemo: '요약해 주세요',
         voiceFileUrl:
           'https://signed.example.com/records/user-1/voice/recording.m4a',
@@ -824,6 +847,7 @@ describe('RecordService', () => {
         title: true,
         createdAt: true,
         content: true,
+        bookMark: true,
         people: {
           select: {
             person: {
@@ -926,6 +950,7 @@ describe('RecordService', () => {
       title: '통화 녹음',
       createdAt: new Date('2026-07-02T01:00:00.000Z'),
       content: '요약된 회의 내용',
+      bookMark: false,
       keywords: [{ name: '미팅' }, { name: '후속 액션' }],
       recordMemo: {
         content: '요약해 주세요',
@@ -959,6 +984,7 @@ describe('RecordService', () => {
       createdAt: '2026-07-02T01:00:00.000Z',
       keyword: ['미팅', '후속 액션'],
       content: '요약된 회의 내용',
+      bookMark: false,
       voiceFileUrl:
         'https://signed.example.com/records/user-1/voice/recording.m4a',
       recordMemo: '요약해 주세요',
@@ -1051,6 +1077,7 @@ describe('RecordService', () => {
         title: '미팅 기록',
         createdAt: new Date('2026-07-02T01:00:00.000Z'),
         content: '회의 내용 전문',
+        bookMark: true,
         keywords: [{ name: '미팅' }, { name: '후속 액션' }],
         recordMemo: {
           content: '다시 볼 것',
@@ -1107,6 +1134,7 @@ describe('RecordService', () => {
         title: '미팅 기록',
         recordMemo: '다시 볼 것',
         personIds: ['person-1', 'person-2'],
+        bookMark: true,
       }),
     ).resolves.toEqual({
       recordId: 'record-1',
@@ -1127,6 +1155,7 @@ describe('RecordService', () => {
       ],
       recordKeywords: ['미팅', '후속 액션'],
       content: '회의 내용 전문',
+      bookMark: true,
       recordMemo: '다시 볼 것',
       voiceFileUrl:
         'https://signed.example.com/records/user-1/voice/recording.m4a',
@@ -1177,6 +1206,7 @@ describe('RecordService', () => {
       data: {
         updatedAt: expect.any(Date) as Date,
         title: '미팅 기록',
+        bookMark: true,
       },
     });
     expect(prisma.recordMemo.upsert).toHaveBeenCalledWith({
@@ -1227,6 +1257,7 @@ describe('RecordService', () => {
         title: true,
         createdAt: true,
         content: true,
+        bookMark: true,
         keywords: {
           select: {
             name: true,
@@ -1304,6 +1335,7 @@ describe('RecordService', () => {
         title: '미팅 기록',
         createdAt: new Date('2026-07-02T01:00:00.000Z'),
         content: '회의 내용 전문',
+        bookMark: false,
         keywords: [],
         recordMemo: null,
         voiceFile: null,
@@ -1326,6 +1358,7 @@ describe('RecordService', () => {
       recordPeople: [],
       recordKeywords: [],
       content: '회의 내용 전문',
+      bookMark: false,
       recordMemo: null,
       voiceFileUrl: null,
       schedule: null,

@@ -66,6 +66,12 @@ export class VoiceRecordDetailEntity implements VoiceRecordDetailResponse {
   })
   content: string;
 
+  @ApiProperty({
+    example: false,
+    description: '음성 기록 북마크 여부',
+  })
+  bookMark: boolean;
+
   @ApiPropertyOptional({
     example: '후속 액션 중심으로 다시 확인 필요',
     description: '기록 메모',

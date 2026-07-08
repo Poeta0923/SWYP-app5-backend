@@ -463,6 +463,7 @@ model Record {
   type                 RecordType      @default(TEXT)
   title                String          @default("제목 없음")
   content              String?
+  bookMark             Boolean         @default(false) @map("book_mark")
   voiceFileId          String?         @unique @map("voice_file_id")
   scheduleId           String?         @unique @map("schedule_id")
   voiceDurationSeconds Int?            @map("voice_duration_seconds")

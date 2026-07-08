@@ -1333,6 +1333,7 @@ export class PeopleService {
         type: true,
         title: true,
         createdAt: true,
+        bookMark: true,
         voiceDurationSeconds: true,
         people: {
           select: {
@@ -1349,7 +1350,10 @@ export class PeopleService {
           },
         },
       },
-      orderBy: { createdAt: Prisma.SortOrder.desc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { createdAt: Prisma.SortOrder.desc },
+      ],
     });
 
     return records.map((record) => ({
@@ -1358,6 +1362,7 @@ export class PeopleService {
       title: record.title,
       people: record.people.map(({ person }) => person.name),
       createdAt: record.createdAt.toISOString(),
+      bookMark: record.bookMark,
       voiceDuration:
         record.type === RecordType.VOICE
           ? this.toMinuteSecond(record.voiceDurationSeconds)

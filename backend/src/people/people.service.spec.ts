@@ -382,6 +382,7 @@ describe('PeopleService', () => {
         type: RecordType.VOICE,
         title: '최근 통화 기록',
         createdAt: new Date('2026-06-29T00:30:00.000Z'),
+        bookMark: true,
         voiceDurationSeconds: 125,
         people: [
           {
@@ -401,6 +402,7 @@ describe('PeopleService', () => {
         type: RecordType.TEXT,
         title: '이전 미팅 기록',
         createdAt: new Date('2026-06-28T03:00:00.000Z'),
+        bookMark: false,
         voiceDurationSeconds: null,
         people: [
           {
@@ -464,6 +466,7 @@ describe('PeopleService', () => {
           title: '최근 통화 기록',
           people: ['김영희', '홍길동'],
           createdAt: '2026-06-29T00:30:00.000Z',
+          bookMark: true,
           voiceDuration: '02:05',
         },
         {
@@ -472,6 +475,7 @@ describe('PeopleService', () => {
           title: '이전 미팅 기록',
           people: ['홍길동'],
           createdAt: '2026-06-28T03:00:00.000Z',
+          bookMark: false,
           voiceDuration: null,
         },
       ],
@@ -564,6 +568,7 @@ describe('PeopleService', () => {
         type: true,
         title: true,
         createdAt: true,
+        bookMark: true,
         voiceDurationSeconds: true,
         people: {
           select: {
@@ -580,7 +585,10 @@ describe('PeopleService', () => {
           },
         },
       },
-      orderBy: { createdAt: Prisma.SortOrder.desc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { createdAt: Prisma.SortOrder.desc },
+      ],
     });
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('cards/front.jpg');
