@@ -333,7 +333,9 @@ export class ScheduleService {
         return null;
       }
 
-      await this.syncScheduleNotificationJob(tx, userId, schedule);
+      if (this.shouldSyncScheduleNotificationJob(item)) {
+        await this.syncScheduleNotificationJob(tx, userId, schedule);
+      }
 
       return schedule;
     });
@@ -622,6 +624,14 @@ export class ScheduleService {
         errorMessage: null,
       },
     });
+  }
+
+  private shouldSyncScheduleNotificationJob(item: UpdateScheduleDto): boolean {
+    return (
+      this.hasOwn(item, 'scheduleTime') ||
+      this.hasOwn(item, 'notificationEnabled') ||
+      this.hasOwn(item, 'reminderOffsetMinutes')
+    );
   }
 
   private hasOwn<T extends object, K extends PropertyKey>(
