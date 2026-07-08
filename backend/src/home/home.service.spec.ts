@@ -93,6 +93,7 @@ describe('HomeService', () => {
         type: RecordType.VOICE,
         title: '통화 녹음',
         createdAt: new Date('2026-06-29T00:30:00.000Z'),
+        bookMark: true,
         voiceDurationSeconds: 185,
         people: [
           {
@@ -107,6 +108,7 @@ describe('HomeService', () => {
         type: RecordType.TEXT,
         title: '메모',
         createdAt: new Date('2026-06-28T10:00:00.000Z'),
+        bookMark: false,
         voiceDurationSeconds: null,
         people: [],
       },
@@ -156,6 +158,7 @@ describe('HomeService', () => {
           title: '통화 녹음',
           people: ['홍길동'],
           createdAt: '2026-06-29T00:30:00.000Z',
+          bookMark: true,
           voiceDuration: '03:05',
         },
         {
@@ -164,6 +167,7 @@ describe('HomeService', () => {
           title: '메모',
           people: [],
           createdAt: '2026-06-28T10:00:00.000Z',
+          bookMark: false,
           voiceDuration: null,
         },
       ],
@@ -213,6 +217,7 @@ describe('HomeService', () => {
         type: true,
         title: true,
         createdAt: true,
+        bookMark: true,
         voiceDurationSeconds: true,
         people: {
           select: {
@@ -229,7 +234,10 @@ describe('HomeService', () => {
           },
         },
       },
-      orderBy: { createdAt: Prisma.SortOrder.desc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { createdAt: Prisma.SortOrder.desc },
+      ],
       take: 5,
     });
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');

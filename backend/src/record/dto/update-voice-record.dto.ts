@@ -3,6 +3,7 @@ import { Transform } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   MaxLength,
@@ -63,4 +64,12 @@ export class UpdateVoiceRecordDto {
   @MinLength(1, { each: true })
   @ArrayUnique()
   personIds?: string[];
+
+  @ApiPropertyOptional({
+    description: '음성 기록 북마크 여부. 생략하면 기존 값을 유지합니다.',
+    example: false,
+  })
+  @ValidateIf(isDefined)
+  @IsBoolean()
+  bookMark?: boolean;
 }

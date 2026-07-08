@@ -68,7 +68,7 @@ export class RecordController {
   @ApiOperation({
     summary: '기록 목록 조회',
     description:
-      '현재 사용자의 전체 기록 목록을 생성 시각 내림차순으로 조회합니다.',
+      '현재 사용자의 전체 기록 목록을 북마크 우선, 생성 시각 내림차순으로 조회합니다.',
   })
   @ApiOkResponse({
     description: '기록 목록 조회 성공',
@@ -218,7 +218,7 @@ export class RecordController {
   @ApiOperation({
     summary: '텍스트 기록 수정',
     description:
-      '텍스트 기록의 제목, 내용, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체하며, 연결 일정 정보도 함께 반환합니다.',
+      '텍스트 기록의 제목, 내용, 북마크 여부, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체하며, 연결 일정 정보도 함께 반환합니다.',
   })
   @ApiBody({ type: UpdateTextRecordDto })
   @ApiOkResponse({
@@ -313,7 +313,7 @@ export class RecordController {
   @ApiOperation({
     summary: '음성 기록 수정',
     description:
-      '음성 기록의 제목, 기록 메모, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체하며, 연결 일정 정보도 함께 반환합니다.',
+      '음성 기록의 제목, 기록 메모, 북마크 여부, 연결 인물을 수정합니다. personIds를 보내면 연결 인물 전체를 교체하며, 연결 일정 정보도 함께 반환합니다.',
   })
   @ApiBody({ type: UpdateVoiceRecordDto })
   @ApiOkResponse({

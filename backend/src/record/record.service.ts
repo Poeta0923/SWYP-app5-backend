@@ -42,6 +42,7 @@ export interface TextRecordCreateResponse {
   title: string;
   createdAt: string;
   content: string;
+  bookMark: boolean;
   people: TextRecordPersonResponse[];
 }
 
@@ -69,6 +70,7 @@ export interface VoiceRecordSummaryResponse {
   createdAt: string;
   keyword: string[];
   content: string;
+  bookMark: boolean;
   voiceFileUrl: string | null;
   recordMemo: string | null;
   schedule: VoiceRecordScheduleResponse | null;
@@ -87,6 +89,7 @@ export interface VoiceRecordDetailResponse {
   recordPeople: VoiceRecordDetailPersonResponse[];
   recordKeywords: string[];
   content: string;
+  bookMark: boolean;
   recordMemo: string | null;
   voiceFileUrl: string | null;
   schedule: VoiceRecordScheduleResponse | null;
@@ -143,6 +146,7 @@ export class RecordService {
         type: true,
         title: true,
         createdAt: true,
+        bookMark: true,
         voiceDurationSeconds: true,
         people: {
           select: {
@@ -159,7 +163,10 @@ export class RecordService {
           },
         },
       },
-      orderBy: { createdAt: Prisma.SortOrder.desc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { createdAt: Prisma.SortOrder.desc },
+      ],
     });
 
     return records.map((record) => ({
@@ -168,6 +175,7 @@ export class RecordService {
       title: record.title,
       people: record.people.map(({ person }) => person.name),
       createdAt: record.createdAt.toISOString(),
+      bookMark: record.bookMark,
       voiceDuration:
         record.type === RecordType.VOICE
           ? this.toMinuteSecond(record.voiceDurationSeconds)
@@ -267,6 +275,7 @@ export class RecordService {
           title: true,
           createdAt: true,
           content: true,
+          bookMark: true,
           people: {
             select: {
               person: {
@@ -303,6 +312,7 @@ export class RecordService {
       title: createdRecord.title,
       createdAt: createdRecord.createdAt.toISOString(),
       content: createdRecord.content ?? '',
+      bookMark: createdRecord.bookMark,
       people: createdRecord.people.map(({ person }) => ({
         id: person.id,
         name: person.name,
@@ -326,6 +336,7 @@ export class RecordService {
         title: true,
         createdAt: true,
         content: true,
+        bookMark: true,
         people: {
           select: {
             person: {
@@ -389,6 +400,7 @@ export class RecordService {
       title: record.title,
       createdAt: record.createdAt.toISOString(),
       content: record.content ?? '',
+      bookMark: record.bookMark,
       people: record.people.map(({ person }) => ({
         id: person.id,
         name: person.name,
@@ -406,7 +418,8 @@ export class RecordService {
     if (
       !this.hasOwn(item, 'title') &&
       !this.hasOwn(item, 'content') &&
-      !this.hasOwn(item, 'personIds')
+      !this.hasOwn(item, 'personIds') &&
+      !this.hasOwn(item, 'bookMark')
     ) {
       throw new BadRequestException({
         code: 'TEXT_RECORD_UPDATE_EMPTY',
@@ -431,6 +444,10 @@ export class RecordService {
 
       if (this.hasOwn(item, 'content')) {
         recordUpdateData.content = item.content;
+      }
+
+      if (this.hasOwn(item, 'bookMark')) {
+        recordUpdateData.bookMark = item.bookMark;
       }
 
       await tx.record.update({
@@ -474,6 +491,7 @@ export class RecordService {
           title: true,
           createdAt: true,
           content: true,
+          bookMark: true,
           people: {
             select: {
               person: {
@@ -538,6 +556,7 @@ export class RecordService {
       title: updatedRecord.title,
       createdAt: updatedRecord.createdAt.toISOString(),
       content: updatedRecord.content ?? '',
+      bookMark: updatedRecord.bookMark,
       people: updatedRecord.people.map(({ person }) => ({
         id: person.id,
         name: person.name,
@@ -565,6 +584,7 @@ export class RecordService {
         title: true,
         createdAt: true,
         content: true,
+        bookMark: true,
         people: {
           select: {
             person: {
@@ -652,6 +672,7 @@ export class RecordService {
       })),
       recordKeywords: record.keywords.map((keyword) => keyword.name),
       content: record.content ?? '',
+      bookMark: record.bookMark,
       recordMemo: record.recordMemo?.content ?? null,
       voiceFileUrl: this.toSignedMediaFileUrl(record.voiceFile),
       schedule: this.toVoiceRecordScheduleResponse(record.schedule, new Date()),
@@ -723,6 +744,7 @@ export class RecordService {
           title: true,
           createdAt: true,
           content: true,
+          bookMark: true,
           keywords: {
             select: {
               name: true,
@@ -778,6 +800,7 @@ export class RecordService {
       createdAt: updatedRecord.createdAt.toISOString(),
       keyword: updatedRecord.keywords.map((keyword) => keyword.name),
       content: updatedRecord.content ?? '',
+      bookMark: updatedRecord.bookMark,
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
       recordMemo: updatedRecord.recordMemo?.content ?? null,
       schedule: this.toVoiceRecordScheduleResponse(
@@ -795,7 +818,8 @@ export class RecordService {
     if (
       !this.hasOwn(item, 'title') &&
       !this.hasOwn(item, 'recordMemo') &&
-      !this.hasOwn(item, 'personIds')
+      !this.hasOwn(item, 'personIds') &&
+      !this.hasOwn(item, 'bookMark')
     ) {
       throw new BadRequestException({
         code: 'VOICE_RECORD_UPDATE_EMPTY',
@@ -816,6 +840,10 @@ export class RecordService {
 
       if (this.hasOwn(item, 'title')) {
         recordUpdateData.title = item.title;
+      }
+
+      if (this.hasOwn(item, 'bookMark')) {
+        recordUpdateData.bookMark = item.bookMark;
       }
 
       await tx.record.update({
@@ -896,6 +924,7 @@ export class RecordService {
           title: true,
           createdAt: true,
           content: true,
+          bookMark: true,
           keywords: {
             select: {
               name: true,
@@ -984,6 +1013,7 @@ export class RecordService {
       })),
       recordKeywords: updatedRecord.keywords.map((keyword) => keyword.name),
       content: updatedRecord.content ?? '',
+      bookMark: updatedRecord.bookMark,
       recordMemo: updatedRecord.recordMemo?.content ?? null,
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
       schedule: this.toVoiceRecordScheduleResponse(

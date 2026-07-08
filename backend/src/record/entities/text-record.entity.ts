@@ -54,6 +54,12 @@ export class TextRecordEntity implements TextRecordCreateResponse {
   content: string;
 
   @ApiProperty({
+    example: false,
+    description: '텍스트 기록 북마크 여부',
+  })
+  bookMark: boolean;
+
+  @ApiProperty({
     type: TextRecordPersonEntity,
     isArray: true,
     description: '기록에 연결된 인물 목록',

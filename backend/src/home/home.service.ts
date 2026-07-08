@@ -32,6 +32,7 @@ export interface HomeRecordResponse {
   title: string;
   people: string[];
   createdAt: string;
+  bookMark: boolean;
   voiceDuration: string | null;
 }
 
@@ -134,6 +135,7 @@ export class HomeService {
         type: true,
         title: true,
         createdAt: true,
+        bookMark: true,
         voiceDurationSeconds: true,
         people: {
           select: {
@@ -150,7 +152,10 @@ export class HomeService {
           },
         },
       },
-      orderBy: { createdAt: Prisma.SortOrder.desc },
+      orderBy: [
+        { bookMark: Prisma.SortOrder.desc },
+        { createdAt: Prisma.SortOrder.desc },
+      ],
       take: HOME_RECORD_LIMIT,
     });
 
@@ -160,6 +165,7 @@ export class HomeService {
       title: record.title,
       people: record.people.map(({ person }) => person.name),
       createdAt: record.createdAt.toISOString(),
+      bookMark: record.bookMark,
       voiceDuration:
         record.type === RecordType.VOICE
           ? this.toMinuteSecond(record.voiceDurationSeconds)

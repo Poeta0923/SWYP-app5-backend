@@ -35,6 +35,12 @@ export class VoiceRecordSummaryEntity implements VoiceRecordSummaryResponse {
   content: string;
 
   @ApiProperty({
+    example: false,
+    description: '음성 기록 북마크 여부',
+  })
+  bookMark: boolean;
+
+  @ApiProperty({
     example:
       'https://cdn.example.com/records/user-1/voice/recording.m4a?Expires=...',
     description: '음성 녹음 파일 CloudFront signed URL',

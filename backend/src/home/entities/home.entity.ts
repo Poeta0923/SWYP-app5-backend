@@ -121,6 +121,12 @@ export class HomeRecordEntity implements HomeRecordResponse {
   })
   createdAt: string;
 
+  @ApiProperty({
+    example: false,
+    description: '기록 북마크 여부',
+  })
+  bookMark: boolean;
+
   @ApiPropertyOptional({
     example: '03:25',
     description: 'VOICE 기록의 녹음 길이(분:초)',
