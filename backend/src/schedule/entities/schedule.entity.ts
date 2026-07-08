@@ -54,6 +54,12 @@ export class ScheduleListItemEntity implements ScheduleListItemResponse {
   scheduleTime: string;
 
   @ApiProperty({
+    example: false,
+    description: '일정 북마크 여부',
+  })
+  bookMark: boolean;
+
+  @ApiProperty({
     example: 'D-1',
     description: '현재 날짜 기준 일정까지 남은 일수',
   })
@@ -98,6 +104,12 @@ export class ScheduleDetailEntity implements ScheduleDetailResponse {
     nullable: true,
   })
   content: string | null;
+
+  @ApiProperty({
+    example: false,
+    description: '일정 북마크 여부',
+  })
+  bookMark: boolean;
 
   @ApiProperty({
     example: true,
