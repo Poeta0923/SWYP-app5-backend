@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { Prisma, RecordType } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service } from '../s3/s3.service';
 
 const HOME_SCHEDULE_LIMIT = 5;
@@ -51,6 +52,8 @@ export class HomeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
 
   async getHome(userId: string): Promise<HomeResponse> {
@@ -87,7 +90,7 @@ export class HomeService {
 
     return schedules.map((schedule) => ({
       id: schedule.id,
-      title: schedule.title,
+      title: this.piiCryptoService.decrypt(schedule.title),
       scheduleTime: schedule.scheduleTime.toISOString(),
       dDay: this.toDDay(now, schedule.scheduleTime),
     }));
@@ -121,6 +124,7 @@ export class HomeService {
 
     return people.map(({ profileImageFile, ...person }) => ({
       ...person,
+      name: this.piiCryptoService.decrypt(person.name),
       image: this.toSignedImageUrl(profileImageFile),
     }));
   }
@@ -145,11 +149,6 @@ export class HomeService {
               },
             },
           },
-          orderBy: {
-            person: {
-              name: Prisma.SortOrder.asc,
-            },
-          },
         },
       },
       orderBy: [
@@ -162,8 +161,10 @@ export class HomeService {
     return records.map((record) => ({
       id: record.id,
       type: record.type,
-      title: record.title,
-      people: record.people.map(({ person }) => person.name),
+      title: this.piiCryptoService.decrypt(record.title),
+      people: record.people
+        .map(({ person }) => this.piiCryptoService.decrypt(person.name))
+        .sort((left, right) => left.localeCompare(right)),
       createdAt: record.createdAt.toISOString(),
       bookMark: record.bookMark,
       voiceDuration:

@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { NotificationType, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 
 export interface NotificationResponse {
   id: string;
@@ -17,7 +18,11 @@ export interface NotificationResponse {
 
 @Injectable()
 export class NotificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
+  ) {}
 
   async getNotifications(userId: string): Promise<NotificationResponse[]> {
     const notifications = await this.prisma.notification.findMany({
@@ -99,8 +104,8 @@ export class NotificationService {
     return {
       id: notification.id,
       type: notification.type,
-      title: notification.title,
-      body: notification.body,
+      title: this.piiCryptoService.decrypt(notification.title),
+      body: this.piiCryptoService.decrypt(notification.body),
       data: notification.data,
       scheduleId: notification.scheduleId,
       personId: notification.personId,
