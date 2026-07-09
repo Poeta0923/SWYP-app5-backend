@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -15,6 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { AgreementsService } from './agreements.service';
 import { AgreeAgreementsDto } from './dto/agree-agreements.dto';
+import { UpdateAgreementConsentDto } from './dto/update-agreement-consent.dto';
 import { AgreementDocumentEntity } from './entities/agreement-document.entity';
 import { AgreementStatusEntity } from './entities/agreement-status.entity';
 
@@ -66,6 +75,39 @@ export class AgreementsController {
     return this.agreementsService.agreeAgreements({
       userId: currentUser.sub,
       agreementDocumentIds: dto.agreementDocumentIds,
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
+  }
+
+  @Patch('consents')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '선택 약관 동의 상태 변경' })
+  @ApiBody({ type: UpdateAgreementConsentDto })
+  @ApiOkResponse({
+    description: '선택 약관 동의 상태 변경 성공',
+    type: AgreementStatusEntity,
+    isArray: true,
+  })
+  @ApiBadRequestResponse({
+    description: '요청 body 검증 실패 또는 필수 약관 변경 요청',
+  })
+  @ApiConflictResponse({
+    description: '약관 변경으로 재로그인 필요',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  updateAgreementConsent(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Body() dto: UpdateAgreementConsentDto,
+    @Req() request: Request,
+  ) {
+    return this.agreementsService.updateAgreementConsent({
+      userId: currentUser.sub,
+      agreementDocumentId: dto.agreementDocumentId,
+      agreed: dto.agreed,
       ipAddress: request.ip,
       userAgent: request.get('user-agent'),
     });

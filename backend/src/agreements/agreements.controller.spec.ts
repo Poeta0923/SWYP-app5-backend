@@ -12,6 +12,7 @@ describe('AgreementsController', () => {
   let agreementsService: {
     getActiveAgreements: jest.Mock;
     agreeAgreements: jest.Mock;
+    updateAgreementConsent: jest.Mock;
   };
   let controller: AgreementsController;
 
@@ -26,6 +27,12 @@ describe('AgreementsController', () => {
         {
           documentId: 'agreement-document-id',
           agreed: true,
+        },
+      ]),
+      updateAgreementConsent: jest.fn().mockResolvedValue([
+        {
+          documentId: 'agreement-document-id',
+          agreed: false,
         },
       ]),
     };
@@ -115,6 +122,60 @@ describe('AgreementsController', () => {
     expect(agreementsService.agreeAgreements).toHaveBeenCalledWith({
       userId: 'user-1',
       agreementDocumentIds: ['agreement-document-id'],
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest',
+    });
+  });
+
+  it('registers PATCH /agreements/consents behind JwtAuthGuard', () => {
+    expect(
+      Reflect.getMetadata(
+        PATH_METADATA,
+        AgreementsController.prototype.updateAgreementConsent,
+      ),
+    ).toBe('consents');
+    expect(
+      Reflect.getMetadata(
+        METHOD_METADATA,
+        AgreementsController.prototype.updateAgreementConsent,
+      ),
+    ).toBe(RequestMethod.PATCH);
+    expect(
+      Reflect.getMetadata(
+        GUARDS_METADATA,
+        AgreementsController.prototype.updateAgreementConsent,
+      ),
+    ).toEqual([JwtAuthGuard]);
+  });
+
+  it('passes the authenticated user, consent state, and request metadata to the service', async () => {
+    await expect(
+      controller.updateAgreementConsent(
+        {
+          sub: 'user-1',
+          familyId: 'family-1',
+          role: 'USER',
+        },
+        {
+          agreementDocumentId: 'agreement-document-id',
+          agreed: false,
+        },
+        {
+          ip: '127.0.0.1',
+          get: jest.fn().mockReturnValue('jest'),
+        } as never,
+      ),
+    ).resolves.toEqual([
+      {
+        documentId: 'agreement-document-id',
+        agreed: false,
+      },
+    ]);
+
+    expect(agreementsService.updateAgreementConsent).toHaveBeenCalledWith({
+      userId: 'user-1',
+      agreementDocumentId: 'agreement-document-id',
+      agreed: false,
       ipAddress: '127.0.0.1',
       userAgent: 'jest',
     });
