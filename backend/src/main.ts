@@ -6,7 +6,6 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
-import { shouldBlockMetricsInProduction } from './common/metrics/metrics-production-access';
 
 const isMetricsPath = (path: string): boolean =>
   path === '/metrics' || path.startsWith('/metrics/');
@@ -60,26 +59,13 @@ async function bootstrap() {
 
   app.use(
     helmet({
-      // 개발 환경에서는 Swagger UI가 정상 렌더링되도록 CSP만 비활성화한다.
-      contentSecurityPolicy:
-        process.env.NODE_ENV === 'production' ? undefined : false,
+      // Swagger UI가 배포 환경에서도 정상 렌더링되도록 CSP를 비활성화한다.
+      contentSecurityPolicy: false,
     }),
   );
 
-  // 운영에서는 Grafana Cloud scrape를 명시적으로 허용한 경우에만 /metrics를 노출한다.
+  // METRICS_USERNAME/PASSWORD가 설정되어 있으면 /metrics에 Basic Auth를 요구한다.
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (
-      shouldBlockMetricsInProduction({
-        nodeEnv: process.env.NODE_ENV,
-        metricsEnabledInProduction: process.env.METRICS_ENABLED_IN_PRODUCTION,
-        path: req.path,
-      })
-    ) {
-      res.status(404).send('Not Found');
-      return;
-    }
-
-    // METRICS_USERNAME/PASSWORD가 설정되어 있으면 /metrics에 Basic Auth를 요구한다.
     if (
       isMetricsPath(req.path) &&
       !isValidMetricsBasicAuth(req.headers.authorization)
@@ -92,34 +78,31 @@ async function bootstrap() {
     next();
   });
 
-  // 운영 환경에서는 등록된 프론트엔드 도메인만 허용하고, 개발 환경에서는 로컬 테스트를 열어둔다.
+  // 배포 환경에서도 로컬/테스트 클라이언트가 붙을 수 있게 origin을 열어둔다.
   app.enableCors({
-    origin:
-      process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : true,
+    origin: true,
     credentials: true,
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    const config = new DocumentBuilder()
-      .setTitle('SWYP-app5-7team API')
-      .setDescription('스위프 앱 5기 7팀 API 문서입니다.')
-      .setVersion('1.0')
-      .addBearerAuth(
-        {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          name: 'access-token',
-          description: 'Enter access token',
-          in: 'header',
-        },
-        'access-token',
-      )
-      .build();
+  const config = new DocumentBuilder()
+    .setTitle('SWYP-app5-7team API')
+    .setDescription('스위프 앱 5기 7팀 API 문서입니다.')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'access-token',
+        description: 'Enter access token',
+        in: 'header',
+      },
+      'access-token',
+    )
+    .build();
 
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('docs', app, document);
-  }
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
 
   app.useGlobalPipes(
     new ValidationPipe({
