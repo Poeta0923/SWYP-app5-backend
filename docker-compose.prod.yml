@@ -1,0 +1,30 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-swyp-app5-backend:prod}
+    container_name: swyp-app5-backend
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${BACKEND_ENV_FILE:-./backend/.env}
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+# 마이그레이션은 이미지의 entrypoint.sh가 컨테이너 시작 시 수행하므로
+# 별도 migrate 서비스를 두지 않는다.
