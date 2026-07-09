@@ -1,4 +1,9 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Prisma, RefreshToken, User } from '../../generated/prisma/client';
 import {
@@ -6,6 +11,7 @@ import {
   type AgreementStatusResponse,
 } from '../agreements/agreements.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service } from '../s3/s3.service';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
@@ -61,6 +67,8 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly agreementsService: AgreementsService,
     private readonly s3Service: S3Service,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
 
   async loginWithGoogle(dto: GoogleLoginDto): Promise<GoogleLoginResult> {
@@ -348,10 +356,13 @@ export class AuthService {
       image?: string;
     },
   ): Promise<GoogleUserResolution> {
-    const existingUser = profile.email
+    const normalizedEmail = profile.email
+      ? this.piiCryptoService.normalizeEmail(profile.email)
+      : null;
+    const existingUser = normalizedEmail
       ? await tx.user.findUnique({
           where: {
-            email: profile.email,
+            emailHash: this.piiCryptoService.hash(normalizedEmail) as string,
           },
         })
       : null;
@@ -360,7 +371,12 @@ export class AuthService {
       existingUser ??
       (await tx.user.create({
         data: {
-          email: profile.email,
+          email: profile.email
+            ? this.piiCryptoService.encrypt(profile.email)
+            : null,
+          emailHash: normalizedEmail
+            ? this.piiCryptoService.hash(normalizedEmail)
+            : null,
           image: profile.image,
           name: profile.name,
         },
@@ -384,7 +400,7 @@ export class AuthService {
     return {
       id: user.id,
       name: user.name,
-      email: user.email,
+      email: this.piiCryptoService.decrypt(user.email),
       image: user.image,
       role: user.role,
       isPremium: user.isPremium,
