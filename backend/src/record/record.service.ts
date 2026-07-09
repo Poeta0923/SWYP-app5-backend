@@ -1265,7 +1265,7 @@ export class RecordService {
     object: T,
     key: K,
   ): object is T & Record<K, unknown> {
-    return Object.prototype.hasOwnProperty.call(object, key);
+    return Object.hasOwn(object, key);
   }
 
   private async deleteUploadedFiles(keys: string[]): Promise<void> {

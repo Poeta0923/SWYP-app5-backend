@@ -61,7 +61,8 @@ export class UpdateScheduleDto {
   personIds?: string[];
 
   @ApiPropertyOptional({
-    description: '일정 내용. 생략하면 유지, null 또는 빈 문자열이면 삭제합니다.',
+    description:
+      '일정 내용. 생략하면 유지, null 또는 빈 문자열이면 삭제합니다.',
     example: '강남역 근처에서 점심 식사',
     nullable: true,
   })

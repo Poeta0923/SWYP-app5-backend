@@ -106,9 +106,7 @@ describe('S3Service', () => {
 
   it('creates a signed CloudFront URL', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-25T00:00:00.000Z'));
-    const { getSignedUrl } = jest.requireMock('@aws-sdk/cloudfront-signer') as {
-      getSignedUrl: jest.Mock;
-    };
+    const { getSignedUrl } = jest.requireMock('@aws-sdk/cloudfront-signer');
 
     const signedUrl = service.getSignedUrl('/uploads/manual key.txt');
 

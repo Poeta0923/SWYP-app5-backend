@@ -57,9 +57,9 @@ describe('PushTokenController', () => {
     expect(Reflect.getMetadata(PATH_METADATA, registerPushTokenHandler)).toBe(
       '/',
     );
-    expect(
-      Reflect.getMetadata(METHOD_METADATA, registerPushTokenHandler),
-    ).toBe(RequestMethod.POST);
+    expect(Reflect.getMetadata(METHOD_METADATA, registerPushTokenHandler)).toBe(
+      RequestMethod.POST,
+    );
     expect(
       Reflect.getMetadata(GUARDS_METADATA, registerPushTokenHandler),
     ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);

@@ -1389,9 +1389,7 @@ describe('RecordService', () => {
     });
     prisma.record.deleteMany.mockResolvedValue({ count: 1 });
 
-    await expect(
-      service.deleteRecord('user-1', 'record-1'),
-    ).resolves.toEqual({
+    await expect(service.deleteRecord('user-1', 'record-1')).resolves.toEqual({
       success: true,
     });
 
@@ -1433,9 +1431,7 @@ describe('RecordService', () => {
     prisma.mediaFile.deleteMany.mockResolvedValue({ count: 1 });
     prisma.record.deleteMany.mockResolvedValue({ count: 1 });
 
-    await expect(
-      service.deleteRecord('user-1', 'record-1'),
-    ).resolves.toEqual({
+    await expect(service.deleteRecord('user-1', 'record-1')).resolves.toEqual({
       success: true,
     });
 

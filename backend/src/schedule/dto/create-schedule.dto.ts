@@ -61,7 +61,8 @@ export class CreateScheduleDto {
   notificationEnabled: boolean;
 
   @ApiProperty({
-    description: '일정 시작 시각 기준 몇 분 전에 알림을 받을지 설정한 분 단위 값',
+    description:
+      '일정 시작 시각 기준 몇 분 전에 알림을 받을지 설정한 분 단위 값',
     example: 30,
     minimum: 0,
   })
