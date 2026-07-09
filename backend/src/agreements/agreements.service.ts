@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import type {
   AgreementDocument,
   AgreementType,
@@ -18,6 +22,14 @@ export interface AgreementStatusResponse {
 export interface AgreeAgreementsParams {
   userId: string;
   agreementDocumentIds: string[];
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export interface UpdateAgreementConsentParams {
+  userId: string;
+  agreementDocumentId: string;
+  agreed: boolean;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -120,6 +132,73 @@ export class AgreementsService {
           },
         });
       }
+    });
+
+    return this.createAgreementStatuses(params.userId, activeDocuments);
+  }
+
+  async updateAgreementConsent(
+    params: UpdateAgreementConsentParams,
+  ): Promise<AgreementStatusResponse[]> {
+    const activeDocuments = await this.findActiveAgreementDocuments();
+    const activeDocument = activeDocuments.find(
+      (document) => document.id === params.agreementDocumentId,
+    );
+
+    if (!activeDocument) {
+      throw new ConflictException({
+        code: 'AGREEMENTS_CHANGED',
+        message: '약관이 변경되었습니다. 다시 로그인해주세요.',
+        invalidDocumentIds: [params.agreementDocumentId],
+      });
+    }
+
+    if (activeDocument.required) {
+      throw new BadRequestException({
+        code: 'REQUIRED_AGREEMENT_CANNOT_BE_UPDATED',
+        message: '필수 약관 동의 상태는 변경할 수 없습니다.',
+      });
+    }
+
+    const changedAt = new Date();
+    const action = params.agreed
+      ? AgreementAction.AGREED
+      : AgreementAction.WITHDRAWN;
+
+    await this.prisma.$transaction(async (tx) => {
+      const agreement = await tx.userAgreement.upsert({
+        where: {
+          userId_documentId: {
+            userId: params.userId,
+            documentId: params.agreementDocumentId,
+          },
+        },
+        update: params.agreed
+          ? {
+              agreedAt: changedAt,
+              withdrawnAt: null,
+            }
+          : {
+              withdrawnAt: changedAt,
+            },
+        create: {
+          userId: params.userId,
+          documentId: params.agreementDocumentId,
+          agreedAt: changedAt,
+          withdrawnAt: params.agreed ? null : changedAt,
+        },
+      });
+
+      await tx.userAgreementEvent.create({
+        data: {
+          userId: params.userId,
+          agreementId: agreement.id,
+          documentId: params.agreementDocumentId,
+          action,
+          ipAddress: params.ipAddress,
+          userAgent: params.userAgent,
+        },
+      });
     });
 
     return this.createAgreementStatuses(params.userId, activeDocuments);

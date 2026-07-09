@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AgreementAction, AgreementType } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgreementsService } from './agreements.service';
@@ -395,6 +395,147 @@ describe('AgreementsService', () => {
     expect(prisma.userAgreementEvent.create).toHaveBeenCalledTimes(2);
   });
 
+  it('updates optional agreement consent to agreed and stores an event', async () => {
+    const marketingDocument = {
+      id: 'marketing-communication-id',
+      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      version: '0.0.1',
+      title: '마케팅수신동의',
+      content: '테스트용 마케팅수신동의',
+      contentHash: 'content-hash',
+      required: false,
+      effectiveAt: new Date('2026-06-24T00:00:00.000Z'),
+      retiredAt: null,
+      createdAt: new Date('2026-06-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-24T00:00:00.000Z'),
+    };
+    prisma.agreementDocument.findMany.mockResolvedValue([marketingDocument]);
+    prisma.userAgreement.upsert.mockResolvedValue({
+      id: 'user-agreement-marketing-id',
+    });
+    prisma.userAgreement.findMany.mockResolvedValue([
+      {
+        documentId: marketingDocument.id,
+      },
+    ]);
+
+    await expect(
+      service.updateAgreementConsent({
+        userId: 'user-1',
+        agreementDocumentId: marketingDocument.id,
+        agreed: true,
+        ipAddress: '127.0.0.1',
+        userAgent: 'jest',
+      }),
+    ).resolves.toEqual([
+      {
+        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        documentId: marketingDocument.id,
+        version: marketingDocument.version,
+        title: marketingDocument.title,
+        required: false,
+        agreed: true,
+      },
+    ]);
+
+    expect(prisma.userAgreement.upsert).toHaveBeenCalledWith({
+      where: {
+        userId_documentId: {
+          userId: 'user-1',
+          documentId: marketingDocument.id,
+        },
+      },
+      update: {
+        agreedAt: expect.any(Date),
+        withdrawnAt: null,
+      },
+      create: {
+        userId: 'user-1',
+        documentId: marketingDocument.id,
+        agreedAt: expect.any(Date),
+        withdrawnAt: null,
+      },
+    });
+    expect(prisma.userAgreementEvent.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        agreementId: 'user-agreement-marketing-id',
+        documentId: marketingDocument.id,
+        action: AgreementAction.AGREED,
+        ipAddress: '127.0.0.1',
+        userAgent: 'jest',
+      },
+    });
+  });
+
+  it('updates optional agreement consent to withdrawn and stores an event', async () => {
+    const marketingDocument = {
+      id: 'marketing-communication-id',
+      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      version: '0.0.1',
+      title: '마케팅수신동의',
+      content: '테스트용 마케팅수신동의',
+      contentHash: 'content-hash',
+      required: false,
+      effectiveAt: new Date('2026-06-24T00:00:00.000Z'),
+      retiredAt: null,
+      createdAt: new Date('2026-06-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-24T00:00:00.000Z'),
+    };
+    prisma.agreementDocument.findMany.mockResolvedValue([marketingDocument]);
+    prisma.userAgreement.upsert.mockResolvedValue({
+      id: 'user-agreement-marketing-id',
+    });
+    prisma.userAgreement.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.updateAgreementConsent({
+        userId: 'user-1',
+        agreementDocumentId: marketingDocument.id,
+        agreed: false,
+        ipAddress: '127.0.0.1',
+        userAgent: 'jest',
+      }),
+    ).resolves.toEqual([
+      {
+        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        documentId: marketingDocument.id,
+        version: marketingDocument.version,
+        title: marketingDocument.title,
+        required: false,
+        agreed: false,
+      },
+    ]);
+
+    expect(prisma.userAgreement.upsert).toHaveBeenCalledWith({
+      where: {
+        userId_documentId: {
+          userId: 'user-1',
+          documentId: marketingDocument.id,
+        },
+      },
+      update: {
+        withdrawnAt: expect.any(Date),
+      },
+      create: {
+        userId: 'user-1',
+        documentId: marketingDocument.id,
+        agreedAt: expect.any(Date),
+        withdrawnAt: expect.any(Date),
+      },
+    });
+    expect(prisma.userAgreementEvent.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        agreementId: 'user-agreement-marketing-id',
+        documentId: marketingDocument.id,
+        action: AgreementAction.WITHDRAWN,
+        ipAddress: '127.0.0.1',
+        userAgent: 'jest',
+      },
+    });
+  });
+
   it('rejects agreement consent for inactive or unknown documents', async () => {
     prisma.agreementDocument.findMany.mockResolvedValue([
       {
@@ -415,6 +556,79 @@ describe('AgreementsService', () => {
     const promise = service.agreeAgreements({
       userId: 'user-1',
       agreementDocumentIds: ['unknown-document-id'],
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(ConflictException);
+    await expect(promise).rejects.toMatchObject({
+      response: {
+        code: 'AGREEMENTS_CHANGED',
+        message: '약관이 변경되었습니다. 다시 로그인해주세요.',
+        invalidDocumentIds: ['unknown-document-id'],
+      },
+    });
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.userAgreement.upsert).not.toHaveBeenCalled();
+    expect(prisma.userAgreementEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects optional agreement consent updates for required documents', async () => {
+    prisma.agreementDocument.findMany.mockResolvedValue([
+      {
+        id: 'terms-id',
+        type: AgreementType.TERMS_OF_SERVICE,
+        version: '0.0.1',
+        title: '이용약관',
+        content: '테스트용 이용약관',
+        contentHash: 'content-hash',
+        required: true,
+        effectiveAt: new Date('2026-06-24T00:00:00.000Z'),
+        retiredAt: null,
+        createdAt: new Date('2026-06-24T00:00:00.000Z'),
+        updatedAt: new Date('2026-06-24T00:00:00.000Z'),
+      },
+    ]);
+
+    const promise = service.updateAgreementConsent({
+      userId: 'user-1',
+      agreementDocumentId: 'terms-id',
+      agreed: false,
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+    await expect(promise).rejects.toMatchObject({
+      response: {
+        code: 'REQUIRED_AGREEMENT_CANNOT_BE_UPDATED',
+        message: '필수 약관 동의 상태는 변경할 수 없습니다.',
+      },
+    });
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.userAgreement.upsert).not.toHaveBeenCalled();
+    expect(prisma.userAgreementEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects optional agreement consent updates for inactive or unknown documents', async () => {
+    prisma.agreementDocument.findMany.mockResolvedValue([
+      {
+        id: 'marketing-communication-id',
+        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        version: '0.0.1',
+        title: '마케팅수신동의',
+        content: '테스트용 마케팅수신동의',
+        contentHash: 'content-hash',
+        required: false,
+        effectiveAt: new Date('2026-06-24T00:00:00.000Z'),
+        retiredAt: null,
+        createdAt: new Date('2026-06-24T00:00:00.000Z'),
+        updatedAt: new Date('2026-06-24T00:00:00.000Z'),
+      },
+    ]);
+
+    const promise = service.updateAgreementConsent({
+      userId: 'user-1',
+      agreementDocumentId: 'unknown-document-id',
+      agreed: false,
     });
 
     await expect(promise).rejects.toBeInstanceOf(ConflictException);
