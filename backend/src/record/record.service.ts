@@ -753,7 +753,9 @@ export class RecordService {
       content: this.piiCryptoService.decrypt(updatedRecord.content) ?? '',
       bookMark: updatedRecord.bookMark,
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
-      recordMemo: this.piiCryptoService.decrypt(updatedRecord.recordMemo?.content),
+      recordMemo: this.piiCryptoService.decrypt(
+        updatedRecord.recordMemo?.content,
+      ),
       schedule: this.toVoiceRecordScheduleResponse(
         updatedRecord.schedule,
         new Date(),
@@ -949,11 +951,15 @@ export class RecordService {
       recordId: updatedRecord.id,
       title: this.piiCryptoService.decrypt(updatedRecord.title),
       createdAt: updatedRecord.createdAt.toISOString(),
-      recordPeople: this.toVoiceRecordDetailPeopleResponse(updatedRecord.people),
+      recordPeople: this.toVoiceRecordDetailPeopleResponse(
+        updatedRecord.people,
+      ),
       recordKeywords: updatedRecord.keywords.map((keyword) => keyword.name),
       content: this.piiCryptoService.decrypt(updatedRecord.content) ?? '',
       bookMark: updatedRecord.bookMark,
-      recordMemo: this.piiCryptoService.decrypt(updatedRecord.recordMemo?.content),
+      recordMemo: this.piiCryptoService.decrypt(
+        updatedRecord.recordMemo?.content,
+      ),
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
       schedule: this.toVoiceRecordScheduleResponse(
         updatedRecord.schedule,
@@ -1088,10 +1094,10 @@ export class RecordService {
     }[],
   ): TextRecordPersonResponse[] {
     return people.map(({ person }) => ({
-        id: person.id,
-        name: this.piiCryptoService.decrypt(person.name),
-        image: this.toSignedMediaFileUrl(person.profileImageFile),
-      }));
+      id: person.id,
+      name: this.piiCryptoService.decrypt(person.name),
+      image: this.toSignedMediaFileUrl(person.profileImageFile),
+    }));
   }
 
   private toVoiceRecordDetailPeopleResponse(
@@ -1104,10 +1110,10 @@ export class RecordService {
     }[],
   ): VoiceRecordDetailPersonResponse[] {
     return people.map(({ person }) => ({
-        id: person.id,
-        name: this.piiCryptoService.decrypt(person.name),
-        image: this.toSignedMediaFileUrl(person.profileImageFile),
-      }));
+      id: person.id,
+      name: this.piiCryptoService.decrypt(person.name),
+      image: this.toSignedMediaFileUrl(person.profileImageFile),
+    }));
   }
 
   private toVoiceRecordPeopleResponse(
@@ -1119,9 +1125,9 @@ export class RecordService {
     }[],
   ): VoiceRecordPersonResponse[] {
     return people.map(({ person }) => ({
-        id: person.id,
-        name: this.piiCryptoService.decrypt(person.name),
-      }));
+      id: person.id,
+      name: this.piiCryptoService.decrypt(person.name),
+    }));
   }
 
   private toVoiceRecordScheduleResponse(
@@ -1138,10 +1144,10 @@ export class RecordService {
       scheduleTime: schedule.scheduleTime.toISOString(),
       dDay: this.toDDay(now, schedule.scheduleTime),
       people: schedule.people.map(({ person }) => ({
-          id: person.id,
-          name: this.piiCryptoService.decrypt(person.name),
-          image: this.toSignedMediaFileUrl(person.profileImageFile),
-        })),
+        id: person.id,
+        name: this.piiCryptoService.decrypt(person.name),
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      })),
     };
   }
 
@@ -1250,7 +1256,7 @@ export class RecordService {
     object: T,
     key: K,
   ): object is T & Record<K, unknown> {
-    return Object.prototype.hasOwnProperty.call(object, key);
+    return Object.hasOwn(object, key);
   }
 
   private async deleteUploadedFiles(keys: string[]): Promise<void> {

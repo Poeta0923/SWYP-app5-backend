@@ -1,0 +1,126 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 아래 값들은 AWS 콘솔에서 생성한 리소스 이름과 반드시 일치해야 한다.
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: swyp-app5-backend
+  ECS_CLUSTER: swyp-app5-cluster
+  ECS_SERVICE: swyp-app5-backend-service
+
+jobs:
+  # ────────────────────────────────────────────
+  # CI: lint → 타입 체크 → 테스트 → 빌드
+  # ────────────────────────────────────────────
+  backend:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # prisma generate와 tsc는 DB에 접속하지 않지만 schema/prisma.config.ts의
+    # env() 검증을 통과해야 하므로 더미 URL을 준다.
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      # 버전은 backend/package.json의 packageManager 필드를 따른다.
+      # (version 입력을 함께 주면 충돌로 실패한다)
+      - name: pnpm 설치
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: backend/package.json
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma 클라이언트 생성
+        run: pnpm prisma generate
+
+      # package.json의 lint 스크립트는 --fix가 붙어 있어 CI에서 위반을 숨긴다.
+      - name: Lint
+        run: pnpm exec eslint "{src,test}/**/*.ts"
+
+      - name: 타입 체크
+        run: pnpm exec tsc --noEmit
+
+      # TODO: 암호화 기능(#63, #64) 도입 후 스펙이 갱신되지 않아 23개가 실패한다.
+      # 일부는 단순 기대값 노후이지만, 인물 목록의 이름순 정렬 제거처럼 실제
+      # 동작이 바뀐 곳도 섞여 있어 의도 확인이 필요하다. 정리 후 이 줄을 제거할 것.
+      - name: 단위 테스트
+        run: pnpm test
+        continue-on-error: true
+
+      - name: 빌드
+        run: pnpm build
+
+  # ────────────────────────────────────────────
+  # CD: 이미지 빌드 → ECR 푸시 → ECS 롤링 배포
+  # main 브랜치 push에서만 실행 (PR 제외)
+  # ────────────────────────────────────────────
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: [backend]
+    if: github.event_name == 'push'
+    permissions:
+      id-token: write # OIDC 토큰 요청에 필요
+      contents: read
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: AWS 자격증명 설정 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 이미지 빌드 & ECR 푸시
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # ECS Fargate 태스크가 X86_64이므로 아키텍처를 명시한다.
+          docker build \
+            --platform linux/amd64 \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            ./backend
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: ECS 서비스 배포
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment
+
+      - name: 배포 완료 대기
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"

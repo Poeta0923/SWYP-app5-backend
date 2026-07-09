@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+
+# Build output generated locally
+dist
+build
+coverage
+.nyc_output
+generated
+
+# Logs and runtime artifacts
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pids
+*.pid
+*.seed
+*.pid.lock
+report.*.json
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+.secret
+.secrets
+.secrets/
+*firebase-adminsdk*.json
+firebase-service-account*.json
+service-account*.json
+
+# Local/editor files
+.DS_Store
+.idea
+.vscode
+*.sublime-workspace
+.temp
+.tmp
+
+# VCS and Docker metadata
+.git
+.gitignore
+Dockerfile
+.dockerignore

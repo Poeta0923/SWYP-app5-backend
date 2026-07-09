@@ -315,8 +315,12 @@ export class PeopleService {
               )
             : null;
 
-        const { phoneNumberHash, birthMonth, birthDay, ...createdPersonFields } =
-          createdPerson;
+        const {
+          phoneNumberHash,
+          birthMonth,
+          birthDay,
+          ...createdPersonFields
+        } = createdPerson;
 
         return {
           ...createdPersonFields,
@@ -1019,7 +1023,11 @@ export class PeopleService {
     return {
       year: targetYear,
       scheduledAt: new Date(
-        this.toBirthdayNotificationAt(birthMonth, birthDay, targetYear).getTime() -
+        this.toBirthdayNotificationAt(
+          birthMonth,
+          birthDay,
+          targetYear,
+        ).getTime() -
           offsetMinutes * 60 * 1000,
       ),
     };
@@ -1509,7 +1517,7 @@ export class PeopleService {
     object: T,
     key: K,
   ): object is T & Record<K, unknown> {
-    return Object.prototype.hasOwnProperty.call(object, key);
+    return Object.hasOwn(object, key);
   }
 
   private personDetailSelect() {

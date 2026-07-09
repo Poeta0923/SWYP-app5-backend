@@ -50,6 +50,11 @@ async function bootstrap() {
   // NestJS 내장 Logger를 Winston으로 교체 (Loki로 로그 push 포함)
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
+  // 컨테이너에서 node는 PID 1로 실행되는데, PID 1은 시그널 기본 동작이 없어
+  // 핸들러를 등록하지 않으면 SIGTERM을 무시하고 stopTimeout 후 SIGKILL로 죽는다.
+  // 이 훅이 핸들러를 등록해 onModuleDestroy(Prisma/Redis 정리)까지 실행시킨다.
+  app.enableShutdownHooks();
+
   // Railway 프록시 뒤의 실제 클라이언트 IP를 request.ip로 기록할 수 있게 한다.
   app.set('trust proxy', 1);
 
