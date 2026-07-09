@@ -17,6 +17,7 @@ FROM deps AS build
 
 COPY nest-cli.json tsconfig.json tsconfig.build.json prisma.config.ts ./
 COPY prisma ./prisma
+COPY scripts ./scripts
 COPY src ./src
 
 RUN DATABASE_URL="postgresql://user:password@localhost:5432/app" \
