@@ -18,8 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "backfill:pii": "ts-node scripts/backfill-pii-encryption.ts",
-    "backfill:pii:dry-run": "ts-node scripts/backfill-pii-encryption.ts --dry-run"
+    "backfill:pii": "node dist/scripts/backfill-pii-encryption.js",
+    "backfill:pii:dry-run": "node dist/scripts/backfill-pii-encryption.js --dry-run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
