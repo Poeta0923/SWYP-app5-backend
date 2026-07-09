@@ -198,8 +198,8 @@ model Person {
   profileImageFile MediaFile? @relation("PersonProfileImage", fields: [profileImageFileId], references: [id], onDelete: SetNull)
 
   @@unique([id, userId])
-  @@unique([userId, phoneNumberHash])
   @@index([userId])
+  @@index([userId, phoneNumberHash])
   @@index([userId, isImportant, interactedAt])
   @@map("people")
 }
