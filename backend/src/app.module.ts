@@ -15,10 +15,12 @@ import { UsersModule } from './users/users.module';
 import { RecordModule } from './record/record.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PrivacyModule } from './privacy/privacy.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    PrivacyModule,
     LoggerModule,
     MetricsModule,
     RedisModule,

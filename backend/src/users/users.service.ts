@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { UpdateUserNameDto } from './dto/update-user-name.dto';
 
 export interface UserResponse {
@@ -13,7 +14,11 @@ export interface UserResponse {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
+  ) {}
 
   async updateName(
     userId: string,
@@ -44,6 +49,9 @@ export class UsersService {
       });
     }
 
-    return user[0];
+    return {
+      ...user[0],
+      email: this.piiCryptoService.decrypt(user[0].email),
+    };
   }
 }

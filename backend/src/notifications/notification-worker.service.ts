@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
   NotificationStatus,
@@ -6,6 +6,7 @@ import {
   Prisma,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { FcmNotificationService } from './fcm-notification.service';
 
 const NOTIFICATION_JOB_BATCH_SIZE = 20;
@@ -26,7 +27,8 @@ type DueNotificationJob = {
   person: {
     id: string;
     name: string;
-    birthDate: Date | null;
+    birthMonth: number | null;
+    birthDay: number | null;
     birthdayNotificationOffsetMinutes: number;
   } | null;
 };
@@ -51,6 +53,8 @@ export class NotificationWorkerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly fcmNotificationService: FcmNotificationService,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -89,7 +93,8 @@ export class NotificationWorkerService {
             select: {
               id: true,
               name: true,
-              birthDate: true,
+              birthMonth: true,
+              birthDay: true,
               birthdayNotificationOffsetMinutes: true,
             },
           },
@@ -131,7 +136,7 @@ export class NotificationWorkerService {
       return;
     }
 
-    const title = job.schedule.title;
+    const title = this.piiCryptoService.decrypt(job.schedule.title);
     const body = this.toScheduleNotificationBody(job.schedule.scheduleTime);
     const data = {
       type: NotificationType.SCHEDULE,
@@ -198,8 +203,8 @@ export class NotificationWorkerService {
         data: {
           userId: job.userId,
           type: job.type,
-          title: params.title,
-          body: params.body,
+          title: this.piiCryptoService.encrypt(params.title),
+          body: this.piiCryptoService.encrypt(params.body),
           data: params.data,
           notificationJobId: job.id,
           scheduleId: params.scheduleId ?? null,
@@ -240,7 +245,7 @@ export class NotificationWorkerService {
   ): Promise<void> {
     const attemptedAt = new Date();
 
-    if (!job.person || !job.person.birthDate) {
+    if (!job.person || !job.person.birthMonth || !job.person.birthDay) {
       await this.markJobFailed(job, {
         attemptedAt,
         errorCode: 'PERSON_BIRTHDAY_NOT_FOUND',
@@ -249,8 +254,9 @@ export class NotificationWorkerService {
       return;
     }
 
-    const title = `${job.person.name}님 생일`;
-    const body = this.toBirthdayNotificationBody(job.person.name);
+    const personName = this.piiCryptoService.decrypt(job.person.name);
+    const title = `${personName}님 생일`;
+    const body = this.toBirthdayNotificationBody(personName);
     const data = {
       type: NotificationType.BIRTHDAY,
       personId: job.person.id,
@@ -287,7 +293,7 @@ export class NotificationWorkerService {
     job: Pick<DueNotificationJob, 'userId' | 'dedupeKey'>,
     person: NonNullable<DueNotificationJob['person']>,
   ): Promise<void> {
-    if (!person.birthDate) {
+    if (!person.birthMonth || !person.birthDay) {
       return;
     }
 
@@ -306,7 +312,8 @@ export class NotificationWorkerService {
         type: NotificationType.BIRTHDAY,
         personId: person.id,
         scheduledAt: this.toBirthdayScheduledAt(
-          person.birthDate,
+          person.birthMonth,
+          person.birthDay,
           nextYear,
           person.birthdayNotificationOffsetMinutes,
         ),
@@ -315,7 +322,8 @@ export class NotificationWorkerService {
       update: {
         status: NotificationStatus.PENDING,
         scheduledAt: this.toBirthdayScheduledAt(
-          person.birthDate,
+          person.birthMonth,
+          person.birthDay,
           nextYear,
           person.birthdayNotificationOffsetMinutes,
         ),
@@ -334,15 +342,16 @@ export class NotificationWorkerService {
   }
 
   private toBirthdayScheduledAt(
-    birthDate: Date,
+    birthMonth: number,
+    birthDay: number,
     year: number,
     offsetMinutes: number,
   ): Date {
     return new Date(
       Date.UTC(
         year,
-        birthDate.getUTCMonth(),
-        birthDate.getUTCDate(),
+        birthMonth - 1,
+        birthDay,
         BIRTHDAY_NOTIFICATION_HOUR_KST - KST_OFFSET_HOURS,
       ) -
         offsetMinutes * 60 * 1000,

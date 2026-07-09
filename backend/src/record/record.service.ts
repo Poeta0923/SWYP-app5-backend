@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   MediaFileType,
@@ -11,6 +12,7 @@ import {
 } from '../../generated/prisma/client';
 import type { HomeRecordResponse } from '../home/home.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service, type UploadedS3File } from '../s3/s3.service';
 import type { CreateTextRecordDto } from './dto/create-text-record.dto';
 import type { UpdateTextRecordDto } from './dto/update-text-record.dto';
@@ -136,6 +138,8 @@ export class RecordService {
     private readonly s3Service: S3Service,
     private readonly openAITranscriptionService: OpenAITranscriptionService,
     private readonly openAISummaryService: OpenAISummaryService,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
 
   async getRecords(userId: string): Promise<HomeRecordResponse[]> {
@@ -156,11 +160,6 @@ export class RecordService {
               },
             },
           },
-          orderBy: {
-            person: {
-              name: Prisma.SortOrder.asc,
-            },
-          },
         },
       },
       orderBy: [
@@ -172,8 +171,10 @@ export class RecordService {
     return records.map((record) => ({
       id: record.id,
       type: record.type,
-      title: record.title,
-      people: record.people.map(({ person }) => person.name),
+      title: this.piiCryptoService.decrypt(record.title),
+      people: record.people.map(({ person }) =>
+        this.piiCryptoService.decrypt(person.name),
+      ),
       createdAt: record.createdAt.toISOString(),
       bookMark: record.bookMark,
       voiceDuration:
@@ -207,7 +208,7 @@ export class RecordService {
           data: {
             userId,
             type: RecordType.VOICE,
-            content: transcribedText,
+            content: this.piiCryptoService.encrypt(transcribedText),
             voiceFileId: voiceFile.id,
           },
         });
@@ -217,7 +218,7 @@ export class RecordService {
             data: {
               userId,
               recordId: record.id,
-              content: recordMemo,
+              content: this.piiCryptoService.encrypt(recordMemo),
             },
           });
         }
@@ -245,8 +246,8 @@ export class RecordService {
         data: {
           userId,
           type: RecordType.TEXT,
-          title: item.title,
-          content: item.content,
+          title: this.piiCryptoService.encrypt(item.title),
+          content: this.piiCryptoService.encrypt(item.content),
         },
         select: {
           id: true,
@@ -290,11 +291,6 @@ export class RecordService {
                 },
               },
             },
-            orderBy: {
-              person: {
-                name: Prisma.SortOrder.asc,
-              },
-            },
           },
         },
       });
@@ -309,13 +305,13 @@ export class RecordService {
 
     return {
       recordId: createdRecord.id,
-      title: createdRecord.title,
+      title: this.piiCryptoService.decrypt(createdRecord.title),
       createdAt: createdRecord.createdAt.toISOString(),
-      content: createdRecord.content ?? '',
+      content: this.piiCryptoService.decrypt(createdRecord.content) ?? '',
       bookMark: createdRecord.bookMark,
       people: createdRecord.people.map(({ person }) => ({
         id: person.id,
-        name: person.name,
+        name: this.piiCryptoService.decrypt(person.name),
         image: this.toSignedMediaFileUrl(person.profileImageFile),
       })),
     };
@@ -351,11 +347,6 @@ export class RecordService {
               },
             },
           },
-          orderBy: {
-            person: {
-              name: Prisma.SortOrder.asc,
-            },
-          },
         },
         schedule: {
           select: {
@@ -376,11 +367,6 @@ export class RecordService {
                   },
                 },
               },
-              orderBy: {
-                person: {
-                  name: Prisma.SortOrder.asc,
-                },
-              },
             },
           },
         },
@@ -397,15 +383,11 @@ export class RecordService {
 
     return {
       recordId: record.id,
-      title: record.title,
+      title: this.piiCryptoService.decrypt(record.title),
       createdAt: record.createdAt.toISOString(),
-      content: record.content ?? '',
+      content: this.piiCryptoService.decrypt(record.content) ?? '',
       bookMark: record.bookMark,
-      people: record.people.map(({ person }) => ({
-        id: person.id,
-        name: person.name,
-        image: this.toSignedMediaFileUrl(person.profileImageFile),
-      })),
+      people: this.toTextRecordPeopleResponse(record.people),
       schedule: this.toVoiceRecordScheduleResponse(record.schedule, new Date()),
     };
   }
@@ -439,11 +421,13 @@ export class RecordService {
       };
 
       if (this.hasOwn(item, 'title')) {
-        recordUpdateData.title = item.title;
+        recordUpdateData.title = this.piiCryptoService.encrypt(
+          item.title as string,
+        );
       }
 
       if (this.hasOwn(item, 'content')) {
-        recordUpdateData.content = item.content;
+        recordUpdateData.content = this.piiCryptoService.encrypt(item.content);
       }
 
       if (this.hasOwn(item, 'bookMark')) {
@@ -506,11 +490,6 @@ export class RecordService {
                 },
               },
             },
-            orderBy: {
-              person: {
-                name: Prisma.SortOrder.asc,
-              },
-            },
           },
           schedule: {
             select: {
@@ -531,11 +510,6 @@ export class RecordService {
                     },
                   },
                 },
-                orderBy: {
-                  person: {
-                    name: Prisma.SortOrder.asc,
-                  },
-                },
               },
             },
           },
@@ -553,15 +527,11 @@ export class RecordService {
 
     return {
       recordId: updatedRecord.id,
-      title: updatedRecord.title,
+      title: this.piiCryptoService.decrypt(updatedRecord.title),
       createdAt: updatedRecord.createdAt.toISOString(),
-      content: updatedRecord.content ?? '',
+      content: this.piiCryptoService.decrypt(updatedRecord.content) ?? '',
       bookMark: updatedRecord.bookMark,
-      people: updatedRecord.people.map(({ person }) => ({
-        id: person.id,
-        name: person.name,
-        image: this.toSignedMediaFileUrl(person.profileImageFile),
-      })),
+      people: this.toTextRecordPeopleResponse(updatedRecord.people),
       schedule: this.toVoiceRecordScheduleResponse(
         updatedRecord.schedule,
         new Date(),
@@ -597,11 +567,6 @@ export class RecordService {
                   },
                 },
               },
-            },
-          },
-          orderBy: {
-            person: {
-              name: Prisma.SortOrder.asc,
             },
           },
         },
@@ -642,11 +607,6 @@ export class RecordService {
                   },
                 },
               },
-              orderBy: {
-                person: {
-                  name: Prisma.SortOrder.asc,
-                },
-              },
             },
           },
         },
@@ -663,17 +623,13 @@ export class RecordService {
 
     return {
       recordId: record.id,
-      title: record.title,
+      title: this.piiCryptoService.decrypt(record.title),
       createdAt: record.createdAt.toISOString(),
-      recordPeople: record.people.map(({ person }) => ({
-        id: person.id,
-        name: person.name,
-        image: this.toSignedMediaFileUrl(person.profileImageFile),
-      })),
+      recordPeople: this.toVoiceRecordDetailPeopleResponse(record.people),
       recordKeywords: record.keywords.map((keyword) => keyword.name),
-      content: record.content ?? '',
+      content: this.piiCryptoService.decrypt(record.content) ?? '',
       bookMark: record.bookMark,
-      recordMemo: record.recordMemo?.content ?? null,
+      recordMemo: this.piiCryptoService.decrypt(record.recordMemo?.content),
       voiceFileUrl: this.toSignedMediaFileUrl(record.voiceFile),
       schedule: this.toVoiceRecordScheduleResponse(record.schedule, new Date()),
     };
@@ -703,7 +659,7 @@ export class RecordService {
       });
     }
 
-    const content = record.content?.trim();
+    const content = this.piiCryptoService.decrypt(record.content)?.trim();
 
     if (!content) {
       throw new BadRequestException({
@@ -737,7 +693,7 @@ export class RecordService {
           id: record.id,
         },
         data: {
-          content: summaryResult.summary,
+          content: this.piiCryptoService.encrypt(summaryResult.summary),
         },
         select: {
           id: true,
@@ -782,11 +738,6 @@ export class RecordService {
                     },
                   },
                 },
-                orderBy: {
-                  person: {
-                    name: Prisma.SortOrder.asc,
-                  },
-                },
               },
             },
           },
@@ -796,13 +747,13 @@ export class RecordService {
 
     return {
       recordId: updatedRecord.id,
-      title: updatedRecord.title,
+      title: this.piiCryptoService.decrypt(updatedRecord.title),
       createdAt: updatedRecord.createdAt.toISOString(),
       keyword: updatedRecord.keywords.map((keyword) => keyword.name),
-      content: updatedRecord.content ?? '',
+      content: this.piiCryptoService.decrypt(updatedRecord.content) ?? '',
       bookMark: updatedRecord.bookMark,
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
-      recordMemo: updatedRecord.recordMemo?.content ?? null,
+      recordMemo: this.piiCryptoService.decrypt(updatedRecord.recordMemo?.content),
       schedule: this.toVoiceRecordScheduleResponse(
         updatedRecord.schedule,
         new Date(),
@@ -839,7 +790,9 @@ export class RecordService {
       };
 
       if (this.hasOwn(item, 'title')) {
-        recordUpdateData.title = item.title;
+        recordUpdateData.title = this.piiCryptoService.encrypt(
+          item.title as string,
+        );
       }
 
       if (this.hasOwn(item, 'bookMark')) {
@@ -884,10 +837,10 @@ export class RecordService {
             create: {
               recordId,
               userId,
-              content: recordMemo,
+              content: this.piiCryptoService.encrypt(recordMemo),
             },
             update: {
-              content: recordMemo,
+              content: this.piiCryptoService.encrypt(recordMemo),
             },
           });
         }
@@ -957,11 +910,6 @@ export class RecordService {
                 },
               },
             },
-            orderBy: {
-              person: {
-                name: Prisma.SortOrder.asc,
-              },
-            },
           },
           schedule: {
             select: {
@@ -982,11 +930,6 @@ export class RecordService {
                     },
                   },
                 },
-                orderBy: {
-                  person: {
-                    name: Prisma.SortOrder.asc,
-                  },
-                },
               },
             },
           },
@@ -1004,17 +947,13 @@ export class RecordService {
 
     return {
       recordId: updatedRecord.id,
-      title: updatedRecord.title,
+      title: this.piiCryptoService.decrypt(updatedRecord.title),
       createdAt: updatedRecord.createdAt.toISOString(),
-      recordPeople: updatedRecord.people.map(({ person }) => ({
-        id: person.id,
-        name: person.name,
-        image: this.toSignedMediaFileUrl(person.profileImageFile),
-      })),
+      recordPeople: this.toVoiceRecordDetailPeopleResponse(updatedRecord.people),
       recordKeywords: updatedRecord.keywords.map((keyword) => keyword.name),
-      content: updatedRecord.content ?? '',
+      content: this.piiCryptoService.decrypt(updatedRecord.content) ?? '',
       bookMark: updatedRecord.bookMark,
-      recordMemo: updatedRecord.recordMemo?.content ?? null,
+      recordMemo: this.piiCryptoService.decrypt(updatedRecord.recordMemo?.content),
       voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
       schedule: this.toVoiceRecordScheduleResponse(
         updatedRecord.schedule,
@@ -1139,6 +1078,52 @@ export class RecordService {
     return mediaFile ? this.s3Service.getSignedUrl(mediaFile.s3Key) : null;
   }
 
+  private toTextRecordPeopleResponse(
+    people: {
+      person: {
+        id: string;
+        name: string;
+        profileImageFile: { s3Key: string } | null;
+      };
+    }[],
+  ): TextRecordPersonResponse[] {
+    return people.map(({ person }) => ({
+        id: person.id,
+        name: this.piiCryptoService.decrypt(person.name),
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      }));
+  }
+
+  private toVoiceRecordDetailPeopleResponse(
+    people: {
+      person: {
+        id: string;
+        name: string;
+        profileImageFile: { s3Key: string } | null;
+      };
+    }[],
+  ): VoiceRecordDetailPersonResponse[] {
+    return people.map(({ person }) => ({
+        id: person.id,
+        name: this.piiCryptoService.decrypt(person.name),
+        image: this.toSignedMediaFileUrl(person.profileImageFile),
+      }));
+  }
+
+  private toVoiceRecordPeopleResponse(
+    people: {
+      person: {
+        id: string;
+        name: string;
+      };
+    }[],
+  ): VoiceRecordPersonResponse[] {
+    return people.map(({ person }) => ({
+        id: person.id,
+        name: this.piiCryptoService.decrypt(person.name),
+      }));
+  }
+
   private toVoiceRecordScheduleResponse(
     schedule: VoiceRecordScheduleData | null | undefined,
     now: Date,
@@ -1149,14 +1134,14 @@ export class RecordService {
 
     return {
       scheduleId: schedule.id,
-      title: schedule.title,
+      title: this.piiCryptoService.decrypt(schedule.title),
       scheduleTime: schedule.scheduleTime.toISOString(),
       dDay: this.toDDay(now, schedule.scheduleTime),
       people: schedule.people.map(({ person }) => ({
-        id: person.id,
-        name: person.name,
-        image: this.toSignedMediaFileUrl(person.profileImageFile),
-      })),
+          id: person.id,
+          name: this.piiCryptoService.decrypt(person.name),
+          image: this.toSignedMediaFileUrl(person.profileImageFile),
+        })),
     };
   }
 

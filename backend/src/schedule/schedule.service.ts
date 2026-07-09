@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   NotificationStatus,
@@ -9,6 +10,7 @@ import {
   Prisma,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service } from '../s3/s3.service';
 import type { CreateScheduleDto } from './dto/create-schedule.dto';
 import type { UpdateScheduleDto } from './dto/update-schedule.dto';
@@ -56,6 +58,8 @@ export class ScheduleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
 
   async createSchedule(
@@ -70,8 +74,8 @@ export class ScheduleService {
       const schedule = await tx.schedule.create({
         data: {
           userId,
-          title: item.title,
-          content: item.content ?? null,
+          title: this.piiCryptoService.encrypt(item.title),
+          content: this.piiCryptoService.encrypt(item.content ?? null),
           scheduleTime,
           notificationEnabled: item.notificationEnabled,
           reminderOffsetMinutes: item.reminderOffsetMinutes,
@@ -169,11 +173,6 @@ export class ScheduleService {
               },
             },
           },
-          orderBy: {
-            person: {
-              name: Prisma.SortOrder.asc,
-            },
-          },
         },
       },
       orderBy: [
@@ -184,7 +183,7 @@ export class ScheduleService {
 
     return schedules.map((schedule) => ({
       id: schedule.id,
-      title: schedule.title,
+      title: this.piiCryptoService.decrypt(schedule.title),
       people: schedule.people.map(({ person }) =>
         this.toSchedulePersonResponse(person),
       ),
@@ -268,7 +267,9 @@ export class ScheduleService {
       };
 
       if (this.hasOwn(item, 'title')) {
-        scheduleUpdateData.title = item.title;
+        scheduleUpdateData.title = this.piiCryptoService.encrypt(
+          item.title as string,
+        );
       }
 
       if (this.hasOwn(item, 'scheduleTime')) {
@@ -276,7 +277,9 @@ export class ScheduleService {
       }
 
       if (this.hasOwn(item, 'content')) {
-        scheduleUpdateData.content = item.content ?? null;
+        scheduleUpdateData.content = this.piiCryptoService.encrypt(
+          item.content ?? null,
+        );
       }
 
       if (this.hasOwn(item, 'bookMark')) {
@@ -437,12 +440,12 @@ export class ScheduleService {
   }): ScheduleDetailResponse {
     return {
       id: schedule.id,
-      title: schedule.title,
+      title: this.piiCryptoService.decrypt(schedule.title),
       scheduleTime: schedule.scheduleTime.toISOString(),
       people: schedule.people.map(({ person }) =>
         this.toSchedulePersonResponse(person),
       ),
-      content: schedule.content,
+      content: this.piiCryptoService.decrypt(schedule.content),
       bookMark: schedule.bookMark,
       notificationEnabled: schedule.notificationEnabled,
       reminderOffsetMinutes: schedule.reminderOffsetMinutes,
@@ -470,11 +473,6 @@ export class ScheduleService {
                 },
               },
             },
-          },
-        },
-        orderBy: {
-          person: {
-            name: Prisma.SortOrder.asc,
           },
         },
       },
@@ -648,7 +646,7 @@ export class ScheduleService {
   }): SchedulePersonResponse {
     return {
       id: person.id,
-      name: person.name,
+      name: this.piiCryptoService.decrypt(person.name),
       image: this.toSignedImageUrl(person.profileImageFile),
     };
   }

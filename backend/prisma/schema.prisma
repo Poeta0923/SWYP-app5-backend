@@ -20,7 +20,8 @@ model User {
   id                    String               @id @default(cuid())
   name                  String
   image                 String?
-  email                 String?              @unique
+  email                 String?
+  emailHash             String?              @unique @map("email_hash")
   isPremium             Boolean              @default(false)
   role                  Role                 @default(USER)
   activeRefreshFamilyId String?              @map("active_refresh_family_id")
@@ -169,9 +170,12 @@ model Person {
   userId                            String            @map("user_id")
   name                              String
   profileImageFileId                String?           @unique @map("profile_image_file_id")
-  birthDate                         DateTime?         @map("birth_date") @db.Date
+  birthDate                         String?           @map("birth_date")
+  birthMonth                        Int?              @map("birth_month")
+  birthDay                          Int?              @map("birth_day")
   isImportant                       Boolean           @default(false) @map("is_important")
   phoneNumber                       String            @map("phone_number")
+  phoneNumberHash                   String?           @map("phone_number_hash")
   job                               String?
   company                           String?
   position                          String?
@@ -195,6 +199,7 @@ model Person {
 
   @@unique([id, userId])
   @@index([userId])
+  @@index([userId, phoneNumberHash])
   @@index([userId, isImportant, interactedAt])
   @@map("people")
 }

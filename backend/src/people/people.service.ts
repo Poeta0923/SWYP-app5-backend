@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   MediaFileType,
@@ -12,6 +13,7 @@ import {
   RecordType,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service, type UploadedS3File } from '../s3/s3.service';
 import type {
   HomeRecordResponse,
@@ -166,7 +168,9 @@ type MediaFileResponseSource = {
 type PersonDetailQueryResult = {
   id: string;
   name: string;
-  birthDate: Date | null;
+  birthDate: string | null;
+  birthMonth: number | null;
+  birthDay: number | null;
   isImportant: boolean;
   phoneNumber: string;
   job: string | null;
@@ -198,6 +202,7 @@ type BirthdayNotificationJobClient = Pick<
 type ExistingPersonForUpdate = {
   id: string;
   phoneNumber: string;
+  phoneNumberHash: string | null;
   birthdayNotificationEnabled: boolean;
   birthdayNotificationOffsetMinutes: number;
 };
@@ -233,6 +238,8 @@ export class PeopleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
+    @Optional()
+    private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
 
   async createPerson(
@@ -270,11 +277,13 @@ export class PeopleService {
         const createdPerson = await tx.person.create({
           data: {
             userId,
-            name: item.name,
+            name: this.piiCryptoService.encrypt(item.name),
             profileImageFileId: profileImageFile?.id,
-            birthDate: this.toDate(item.birthDate),
+            birthDate: this.encryptNullable(item.birthDate),
+            ...this.toBirthDatePartData(item.birthDate),
             isImportant: item.isImportant ?? false,
-            phoneNumber: item.phoneNumber,
+            phoneNumber: this.piiCryptoService.encrypt(item.phoneNumber),
+            phoneNumberHash: this.hashPhoneNumber(item.phoneNumber),
             job: item.job,
             company: item.company,
             position: item.position,
@@ -306,9 +315,14 @@ export class PeopleService {
               )
             : null;
 
+        const { phoneNumberHash, birthMonth, birthDay, ...createdPersonFields } =
+          createdPerson;
+
         return {
-          ...createdPerson,
+          ...createdPersonFields,
+          name: this.piiCryptoService.decrypt(createdPerson.name),
           birthDate: this.toDateOnlyString(createdPerson.birthDate),
+          phoneNumber: this.piiCryptoService.decrypt(createdPerson.phoneNumber),
           image: this.toSignedImageUrl(profileImageFile),
           extraContacts,
           businessCards: businessCard
@@ -330,8 +344,9 @@ export class PeopleService {
     const people = await this.prisma.person.createManyAndReturn({
       data: items.map((item) => ({
         userId,
-        name: item.name,
-        phoneNumber: item.phoneNumber,
+        name: this.piiCryptoService.encrypt(item.name),
+        phoneNumber: this.piiCryptoService.encrypt(item.phoneNumber),
+        phoneNumberHash: this.hashPhoneNumber(item.phoneNumber),
       })),
       select: {
         id: true,
@@ -342,7 +357,10 @@ export class PeopleService {
     });
 
     return people.map((person) => ({
-      ...person,
+      id: person.id,
+      name: this.piiCryptoService.decrypt(person.name),
+      phoneNumber: this.piiCryptoService.decrypt(person.phoneNumber),
+      isImportant: person.isImportant,
       image: null,
     }));
   }
@@ -405,6 +423,8 @@ export class PeopleService {
 
     return people.map(({ profileImageFile, ...person }) => ({
       ...person,
+      name: this.piiCryptoService.decrypt(person.name),
+      phoneNumber: this.piiCryptoService.decrypt(person.phoneNumber),
       image: this.toSignedImageUrl(profileImageFile),
       updatedAt: person.updatedAt.toISOString(),
     }));
@@ -429,7 +449,7 @@ export class PeopleService {
 
     if (
       item.phoneNumber !== undefined &&
-      item.phoneNumber !== existingPerson.phoneNumber
+      this.hashPhoneNumber(item.phoneNumber) !== existingPerson.phoneNumberHash
     ) {
       await this.assertPhoneNumberIsAvailable(
         userId,
@@ -750,10 +770,11 @@ export class PeopleService {
     phoneNumber: string,
     excludePersonId?: string,
   ): Promise<void> {
+    const phoneNumberHash = this.hashPhoneNumber(phoneNumber);
     const existingPerson = await this.prisma.person.findFirst({
       where: {
         userId,
-        phoneNumber,
+        phoneNumberHash,
         ...(excludePersonId ? { id: { not: excludePersonId } } : {}),
       },
       select: {
@@ -784,6 +805,7 @@ export class PeopleService {
       select: {
         id: true,
         phoneNumber: true,
+        phoneNumberHash: true,
         birthdayNotificationEnabled: true,
         birthdayNotificationOffsetMinutes: true,
       },
@@ -852,16 +874,19 @@ export class PeopleService {
     const data: Prisma.PersonUpdateInput = {};
 
     if (this.hasOwn(item, 'name')) {
-      data.name = item.name;
+      data.name = this.piiCryptoService.encrypt(item.name as string);
     }
     if (this.hasOwn(item, 'birthDate')) {
-      data.birthDate = this.toNullableDate(item.birthDate);
+      data.birthDate = this.encryptNullable(item.birthDate);
+      Object.assign(data, this.toBirthDatePartData(item.birthDate));
     }
     if (this.hasOwn(item, 'isImportant')) {
       data.isImportant = item.isImportant;
     }
     if (this.hasOwn(item, 'phoneNumber')) {
-      data.phoneNumber = item.phoneNumber;
+      const phoneNumber = item.phoneNumber as string;
+      data.phoneNumber = this.piiCryptoService.encrypt(phoneNumber);
+      data.phoneNumberHash = this.hashPhoneNumber(phoneNumber);
     }
     if (this.hasOwn(item, 'job')) {
       data.job = item.job;
@@ -894,12 +919,17 @@ export class PeopleService {
     userId: string,
     person: {
       id: string;
-      birthDate: Date | null;
+      birthMonth: number | null;
+      birthDay: number | null;
       birthdayNotificationEnabled: boolean;
       birthdayNotificationOffsetMinutes: number;
     },
   ): Promise<void> {
-    if (!person.birthdayNotificationEnabled || !person.birthDate) {
+    if (
+      !person.birthdayNotificationEnabled ||
+      !person.birthMonth ||
+      !person.birthDay
+    ) {
       await client.notificationJob.updateMany({
         where: {
           userId,
@@ -915,7 +945,8 @@ export class PeopleService {
     }
 
     const scheduledBirthday = this.toNextBirthdayNotificationSchedule(
-      person.birthDate,
+      person.birthMonth,
+      person.birthDay,
       person.birthdayNotificationOffsetMinutes,
       new Date(),
     );
@@ -967,7 +998,8 @@ export class PeopleService {
   }
 
   private toNextBirthdayNotificationSchedule(
-    birthDate: Date,
+    birthMonth: number,
+    birthDay: number,
     offsetMinutes: number,
     now: Date,
   ): { year: number; scheduledAt: Date } {
@@ -975,7 +1007,8 @@ export class PeopleService {
       now.getTime() + KST_OFFSET_HOURS * 60 * 60 * 1000,
     ).getUTCFullYear();
     const currentYearBirthdayAt = this.toBirthdayNotificationAt(
-      birthDate,
+      birthMonth,
+      birthDay,
       currentKstYear,
     );
     const targetYear =
@@ -986,18 +1019,22 @@ export class PeopleService {
     return {
       year: targetYear,
       scheduledAt: new Date(
-        this.toBirthdayNotificationAt(birthDate, targetYear).getTime() -
+        this.toBirthdayNotificationAt(birthMonth, birthDay, targetYear).getTime() -
           offsetMinutes * 60 * 1000,
       ),
     };
   }
 
-  private toBirthdayNotificationAt(birthDate: Date, year: number): Date {
+  private toBirthdayNotificationAt(
+    birthMonth: number,
+    birthDay: number,
+    year: number,
+  ): Date {
     return new Date(
       Date.UTC(
         year,
-        birthDate.getUTCMonth(),
-        birthDate.getUTCDate(),
+        birthMonth - 1,
+        birthDay,
         BIRTHDAY_NOTIFICATION_HOUR_KST - KST_OFFSET_HOURS,
       ),
     );
@@ -1165,7 +1202,7 @@ export class PeopleService {
             userId,
             personId,
             type: extraContact.type,
-            content: extraContact.content,
+            content: this.piiCryptoService.encrypt(extraContact.content),
           },
           select: {
             id: true,
@@ -1174,6 +1211,11 @@ export class PeopleService {
           },
         }),
       ),
+    ).then((createdExtraContacts) =>
+      createdExtraContacts.map((extraContact) => ({
+        ...extraContact,
+        content: this.piiCryptoService.decrypt(extraContact.content),
+      })),
     );
   }
 
@@ -1225,7 +1267,7 @@ export class PeopleService {
     userId: string,
     person: PersonDetailQueryResult,
   ): Promise<PersonDetailResponse> {
-    const { profileImageFile, businessCards, ...personFields } = person;
+    const { profileImageFile, businessCards } = person;
     const now = new Date();
     const [upcomingSchedules, records] = await Promise.all([
       this.getUpcomingSchedulesForPerson(client, userId, person.id, now),
@@ -1233,8 +1275,23 @@ export class PeopleService {
     ]);
 
     return {
-      ...personFields,
+      id: person.id,
+      name: this.piiCryptoService.decrypt(person.name),
       birthDate: this.toDateOnlyString(person.birthDate),
+      isImportant: person.isImportant,
+      phoneNumber: this.piiCryptoService.decrypt(person.phoneNumber),
+      job: person.job,
+      company: person.company,
+      position: person.position,
+      relationship: person.relationship,
+      personality: person.personality,
+      birthdayNotificationEnabled: person.birthdayNotificationEnabled,
+      birthdayNotificationOffsetMinutes:
+        person.birthdayNotificationOffsetMinutes,
+      extraContacts: person.extraContacts.map((extraContact) => ({
+        ...extraContact,
+        content: this.piiCryptoService.decrypt(extraContact.content),
+      })),
       image: this.toSignedImageUrl(profileImageFile),
       businessCards: businessCards.map((businessCard) =>
         this.toBusinessCardResponse(businessCard),
@@ -1307,7 +1364,7 @@ export class PeopleService {
 
     return schedules.map((schedule) => ({
       id: schedule.id,
-      title: schedule.title,
+      title: this.piiCryptoService.decrypt(schedule.title),
       scheduleTime: schedule.scheduleTime.toISOString(),
       dDay: this.toDDay(now, schedule.scheduleTime),
     }));
@@ -1343,11 +1400,6 @@ export class PeopleService {
               },
             },
           },
-          orderBy: {
-            person: {
-              name: Prisma.SortOrder.asc,
-            },
-          },
         },
       },
       orderBy: [
@@ -1359,8 +1411,10 @@ export class PeopleService {
     return records.map((record) => ({
       id: record.id,
       type: record.type,
-      title: record.title,
-      people: record.people.map(({ person }) => person.name),
+      title: this.piiCryptoService.decrypt(record.title),
+      people: record.people
+        .map(({ person }) => this.piiCryptoService.decrypt(person.name))
+        .sort((left, right) => left.localeCompare(right)),
       createdAt: record.createdAt.toISOString(),
       bookMark: record.bookMark,
       voiceDuration:
@@ -1402,20 +1456,53 @@ export class PeopleService {
     return value.toString().padStart(2, '0');
   }
 
-  private toDateOnlyString(date: Date | null): string | null {
-    return date ? date.toISOString().slice(0, 10) : null;
-  }
-
-  private toDate(date?: string): Date | undefined {
-    return date ? new Date(date) : undefined;
-  }
-
-  private toNullableDate(date?: string | null): Date | null | undefined {
-    if (date === null) {
+  private toDateOnlyString(date: string | Date | null): string | null {
+    if (!date) {
       return null;
     }
 
-    return this.toDate(date);
+    if (date instanceof Date) {
+      return date.toISOString().slice(0, 10);
+    }
+
+    return this.piiCryptoService.decrypt(date);
+  }
+
+  private encryptNullable(value?: string | null): string | null | undefined {
+    if (value === null) {
+      return null;
+    }
+
+    return value ? this.piiCryptoService.encrypt(value) : undefined;
+  }
+
+  private toBirthDatePartData(date?: string | null): {
+    birthMonth?: number | null;
+    birthDay?: number | null;
+  } {
+    if (date === undefined) {
+      return {};
+    }
+
+    if (date === null || date === '') {
+      return {
+        birthMonth: null,
+        birthDay: null,
+      };
+    }
+
+    const parsedDate = new Date(date);
+
+    return {
+      birthMonth: parsedDate.getUTCMonth() + 1,
+      birthDay: parsedDate.getUTCDate(),
+    };
+  }
+
+  private hashPhoneNumber(phoneNumber: string): string {
+    return this.piiCryptoService.hash(
+      this.piiCryptoService.normalizePhoneNumber(phoneNumber),
+    ) as string;
   }
 
   private hasOwn<T extends object, K extends PropertyKey>(
@@ -1430,6 +1517,8 @@ export class PeopleService {
       id: true,
       name: true,
       birthDate: true,
+      birthMonth: true,
+      birthDay: true,
       isImportant: true,
       phoneNumber: true,
       job: true,
