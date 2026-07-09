@@ -64,7 +64,7 @@ describe('AgreementsService', () => {
     const marketingDocument = {
       ...newerTermsDocument,
       id: 'marketing-communication-id',
-      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
       title: '마케팅수신동의',
       required: false,
     };
@@ -119,7 +119,7 @@ describe('AgreementsService', () => {
     const marketingDocument = {
       ...newerTermsDocument,
       id: 'marketing-communication-id',
-      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
       title: '마케팅수신동의',
       required: false,
     };
@@ -137,7 +137,7 @@ describe('AgreementsService', () => {
     await expect(service.getActiveAgreementStatuses('user-1')).resolves.toEqual(
       [
         {
-          type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+          type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
           documentId: marketingDocument.id,
           version: marketingDocument.version,
           title: marketingDocument.title,
@@ -211,7 +211,7 @@ describe('AgreementsService', () => {
     const optionalDocument = {
       ...requiredDocument,
       id: 'marketing-communication-id',
-      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
       title: '마케팅수신동의',
       required: false,
     };
@@ -259,7 +259,7 @@ describe('AgreementsService', () => {
     const privacyDocument = {
       ...termsDocument,
       id: 'privacy-policy-id',
-      type: AgreementType.PRIVACY_POLICY,
+      type: AgreementType.PRIVACY_COLLECTION_AND_PROCESSING_CONSENT,
       title: '개인정보처리방침',
     };
     prisma.agreementDocument.findMany.mockResolvedValue([
@@ -281,7 +281,7 @@ describe('AgreementsService', () => {
     prisma.agreementDocument.findMany.mockResolvedValue([
       {
         id: 'marketing-communication-id',
-        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
         version: '0.0.1',
         title: '마케팅수신동의',
         content: '테스트용 이용약관',
@@ -318,7 +318,7 @@ describe('AgreementsService', () => {
     const marketingDocument = {
       ...termsDocument,
       id: 'marketing-communication-id',
-      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
       title: '마케팅수신동의',
       required: false,
     };
@@ -347,7 +347,7 @@ describe('AgreementsService', () => {
       }),
     ).resolves.toEqual([
       {
-        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
         documentId: marketingDocument.id,
         version: marketingDocument.version,
         title: marketingDocument.title,
@@ -398,7 +398,7 @@ describe('AgreementsService', () => {
   it('updates optional agreement consent to agreed and stores an event', async () => {
     const marketingDocument = {
       id: 'marketing-communication-id',
-      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
       version: '0.0.1',
       title: '마케팅수신동의',
       content: '테스트용 마케팅수신동의',
@@ -429,7 +429,7 @@ describe('AgreementsService', () => {
       }),
     ).resolves.toEqual([
       {
-        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
         documentId: marketingDocument.id,
         version: marketingDocument.version,
         title: marketingDocument.title,
@@ -471,7 +471,7 @@ describe('AgreementsService', () => {
   it('updates optional agreement consent to withdrawn and stores an event', async () => {
     const marketingDocument = {
       id: 'marketing-communication-id',
-      type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+      type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
       version: '0.0.1',
       title: '마케팅수신동의',
       content: '테스트용 마케팅수신동의',
@@ -498,7 +498,7 @@ describe('AgreementsService', () => {
       }),
     ).resolves.toEqual([
       {
-        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
         documentId: marketingDocument.id,
         version: marketingDocument.version,
         title: marketingDocument.title,
@@ -612,7 +612,7 @@ describe('AgreementsService', () => {
     prisma.agreementDocument.findMany.mockResolvedValue([
       {
         id: 'marketing-communication-id',
-        type: AgreementType.MARKETING_COMMUNICATION_CONSENT,
+        type: AgreementType.MARKETING_AND_PUSH_NOTIFICATION_CONSENT,
         version: '0.0.1',
         title: '마케팅수신동의',
         content: '테스트용 마케팅수신동의',
