@@ -5,7 +5,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Prisma, RefreshToken, User } from '../../generated/prisma/client';
+import type {
+  Prisma,
+  RefreshToken,
+  User,
+  UserPlan,
+} from '../../generated/prisma/client';
 import {
   AgreementsService,
   type AgreementStatusResponse,
@@ -27,7 +32,7 @@ export interface AuthUserResponse {
   email: string | null;
   image: string | null;
   role: string;
-  isPremium: boolean;
+  plan: UserPlan;
 }
 
 export interface GoogleLoginResult {
@@ -403,7 +408,7 @@ export class AuthService {
       email: this.piiCryptoService.decrypt(user.email),
       image: user.image,
       role: user.role,
-      isPremium: user.isPremium,
+      plan: user.plan,
     };
   }
 

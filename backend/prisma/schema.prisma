@@ -22,7 +22,7 @@ model User {
   image                 String?
   email                 String?
   emailHash             String?              @unique @map("email_hash")
-  isPremium             Boolean              @default(false)
+  plan                  UserPlan             @default(Basic)
   role                  Role                 @default(USER)
   activeRefreshFamilyId String?              @map("active_refresh_family_id")
   accounts              Account[]
@@ -56,6 +56,12 @@ model User {
 enum Role {
   USER
   ADMIN
+}
+
+enum UserPlan {
+  Basic
+  Pro
+  Premium
 }
 
 model AgreementDocument {

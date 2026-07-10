@@ -8,7 +8,7 @@ describe('AuthService', () => {
     email: 'user@example.com',
     image: null,
     role: 'USER',
-    isPremium: false,
+    plan: 'Basic',
     activeRefreshFamilyId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -243,7 +243,7 @@ describe('AuthService', () => {
         email: user.email,
         image: user.image,
         role: user.role,
-        isPremium: user.isPremium,
+        plan: user.plan,
       },
       agreements: [
         {
@@ -300,7 +300,8 @@ describe('AuthService', () => {
 
     expect(resolveTx.user.create).toHaveBeenCalledWith({
       data: {
-        email: newUser.email,
+        email: expect.stringMatching(/^v1:/),
+        emailHash: expect.any(String),
         image: newUser.image,
         name: newUser.name,
       },
@@ -319,7 +320,7 @@ describe('AuthService', () => {
         email: newUser.email,
         image: newUser.image,
         role: newUser.role,
-        isPremium: newUser.isPremium,
+        plan: newUser.plan,
       },
       agreements: [
         {
