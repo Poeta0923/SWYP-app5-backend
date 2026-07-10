@@ -32,7 +32,7 @@ export class AuthController {
           email: 'user@example.com',
           image: 'https://lh3.googleusercontent.com/a/example',
           role: 'USER',
-          isPremium: false,
+          plan: 'Basic',
         },
         agreements: [
           {

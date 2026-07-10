@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserPlan } from '../../../generated/prisma/client';
 import type { UserResponse } from '../users.service';
 
 export class UserEntity implements UserResponse {
@@ -35,8 +36,9 @@ export class UserEntity implements UserResponse {
   role: string;
 
   @ApiProperty({
-    example: false,
-    description: '프리미엄 사용자 여부',
+    example: 'Basic',
+    enum: UserPlan,
+    description: '사용자 플랜',
   })
-  isPremium: boolean;
+  plan: UserPlan;
 }

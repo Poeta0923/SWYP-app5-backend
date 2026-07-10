@@ -1,4 +1,4 @@
-import { Body, Controller, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -15,6 +15,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtAccessPayload } from '../auth/types/jwt-access-payload.type';
 import { UpdateUserNameDto } from './dto/update-user-name.dto';
+import { MyPageEntity } from './entities/my-page.entity';
 import { UserEntity } from './entities/user.entity';
 import { UsersService } from './users.service';
 
@@ -22,6 +23,27 @@ import { UsersService } from './users.service';
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '마이페이지 조회' })
+  @ApiOkResponse({
+    description: '마이페이지 조회 성공',
+    type: MyPageEntity,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '사용자를 찾을 수 없음',
+  })
+  getMyPage(@CurrentUser() currentUser: JwtAccessPayload) {
+    return this.usersService.getMyPage(currentUser.sub);
+  }
 
   @Patch('me/name')
   @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
