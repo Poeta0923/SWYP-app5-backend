@@ -632,11 +632,18 @@ export class ScheduleService {
     );
   }
 
+  // tsconfig의 target이 ES2023이라 useDefineForClassFields가 켜지고, 그 결과
+  // plainToInstance가 만든 DTO는 클라이언트가 보내지 않은 필드도 undefined 값의
+  // own property로 갖는다. 키 존재만 보면 "보냈는지"를 가릴 수 없어 값까지 확인한다.
+  // 명시적 null은 undefined가 아니므로 "필드를 비우라"는 의도로 계속 통과한다.
   private hasOwn<T extends object, K extends PropertyKey>(
     object: T,
     key: K,
   ): object is T & Record<K, unknown> {
-    return Object.hasOwn(object, key);
+    return (
+      Object.hasOwn(object, key) &&
+      (object as Record<PropertyKey, unknown>)[key] !== undefined
+    );
   }
 
   private toSchedulePersonResponse(person: {
