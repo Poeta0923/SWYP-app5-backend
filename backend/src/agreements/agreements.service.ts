@@ -10,6 +10,10 @@ import type {
 import { AgreementAction } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+export type AgreementDocumentResponse = AgreementDocument & {
+  agreed: boolean;
+};
+
 export interface AgreementStatusResponse {
   type: AgreementType;
   documentId: string;
@@ -38,8 +42,11 @@ export interface UpdateAgreementConsentParams {
 export class AgreementsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getActiveAgreements(): Promise<AgreementDocument[]> {
-    return this.findActiveAgreementDocuments();
+  async getActiveAgreements(
+    userId: string,
+  ): Promise<AgreementDocumentResponse[]> {
+    const activeDocuments = await this.findActiveAgreementDocuments();
+    return this.createAgreementDocuments(userId, activeDocuments);
   }
 
   async getActiveAgreementStatuses(
@@ -236,6 +243,38 @@ export class AgreementsService {
       version: document.version,
       title: document.title,
       required: document.required,
+      agreed: agreedDocumentIds.has(document.id),
+    }));
+  }
+
+  private async createAgreementDocuments(
+    userId: string,
+    activeDocuments: AgreementDocument[],
+  ): Promise<AgreementDocumentResponse[]> {
+    const activeDocumentIds = activeDocuments.map((document) => document.id);
+
+    if (activeDocumentIds.length === 0) {
+      return [];
+    }
+
+    const agreements = await this.prisma.userAgreement.findMany({
+      where: {
+        userId,
+        documentId: {
+          in: activeDocumentIds,
+        },
+        withdrawnAt: null,
+      },
+      select: {
+        documentId: true,
+      },
+    });
+    const agreedDocumentIds = new Set(
+      agreements.map((agreement) => agreement.documentId),
+    );
+
+    return activeDocuments.map((document) => ({
+      ...document,
       agreed: agreedDocumentIds.has(document.id),
     }));
   }

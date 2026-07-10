@@ -73,10 +73,21 @@ describe('AgreementsService', () => {
       newerTermsDocument,
       olderTermsDocument,
     ]);
+    prisma.userAgreement.findMany.mockResolvedValue([
+      {
+        documentId: newerTermsDocument.id,
+      },
+    ]);
 
-    await expect(service.getActiveAgreements()).resolves.toEqual([
-      marketingDocument,
-      newerTermsDocument,
+    await expect(service.getActiveAgreements('user-1')).resolves.toEqual([
+      {
+        ...marketingDocument,
+        agreed: false,
+      },
+      {
+        ...newerTermsDocument,
+        agreed: true,
+      },
     ]);
     expect(prisma.agreementDocument.findMany).toHaveBeenCalledWith({
       where: {
@@ -93,6 +104,18 @@ describe('AgreementsService', () => {
           effectiveAt: 'desc',
         },
       ],
+    });
+    expect(prisma.userAgreement.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        documentId: {
+          in: [marketingDocument.id, newerTermsDocument.id],
+        },
+        withdrawnAt: null,
+      },
+      select: {
+        documentId: true,
+      },
     });
   });
 

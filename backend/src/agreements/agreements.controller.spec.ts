@@ -21,6 +21,7 @@ describe('AgreementsController', () => {
       getActiveAgreements: jest.fn().mockResolvedValue([
         {
           id: 'agreement-document-id',
+          agreed: true,
         },
       ]),
       agreeAgreements: jest.fn().mockResolvedValue([
@@ -66,13 +67,22 @@ describe('AgreementsController', () => {
   });
 
   it('returns active agreements from the service', async () => {
-    await expect(controller.getActiveAgreements()).resolves.toEqual([
+    await expect(
+      controller.getActiveAgreements({
+        sub: 'user-1',
+        familyId: 'family-1',
+        role: 'USER',
+      }),
+    ).resolves.toEqual([
       {
         id: 'agreement-document-id',
+        agreed: true,
       },
     ]);
 
-    expect(agreementsService.getActiveAgreements).toHaveBeenCalledTimes(1);
+    expect(agreementsService.getActiveAgreements).toHaveBeenCalledWith(
+      'user-1',
+    );
   });
 
   it('registers POST /agreements/consents behind JwtAuthGuard', () => {

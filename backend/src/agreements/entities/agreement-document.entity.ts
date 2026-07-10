@@ -44,6 +44,12 @@ export class AgreementDocumentEntity implements AgreementDocument {
 
   @ApiProperty({
     example: true,
+    description: '현재 사용자 동의 여부',
+  })
+  agreed: boolean;
+
+  @ApiProperty({
+    example: true,
     description: '필수 동의 여부',
   })
   required: boolean;
