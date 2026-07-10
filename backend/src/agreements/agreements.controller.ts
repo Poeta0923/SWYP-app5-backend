@@ -44,8 +44,8 @@ export class AgreementsController {
   @ApiUnauthorizedResponse({
     description: 'Access token 검증 실패 또는 세션 만료',
   })
-  getActiveAgreements() {
-    return this.agreementsService.getActiveAgreements();
+  getActiveAgreements(@CurrentUser() currentUser: JwtAccessPayload) {
+    return this.agreementsService.getActiveAgreements(currentUser.sub);
   }
 
   @Post('consents')
