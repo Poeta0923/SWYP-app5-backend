@@ -1,4 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { UpdatePersonItemDto } from './dto/update-person-item.dto';
 import {
   MediaFileType,
   MediaFileUsage,
@@ -692,6 +694,53 @@ describe('PeopleService', () => {
     expect(s3Service.uploadFile).not.toHaveBeenCalled();
     expect(prisma.mediaFile.create).not.toHaveBeenCalled();
     expect(prisma.businessCard.create).not.toHaveBeenCalled();
+  });
+
+  // 컨트롤러가 받는 DTO는 ValidationPipe(transform)를 거친 plainToInstance 인스턴스라
+  // 클라이언트가 보내지 않은 필드도 undefined 값의 own property로 존재한다.
+  // 객체 리터럴을 넘기는 다른 테스트로는 이 경로를 재현할 수 없다.
+  it('updates only the fields present in a transformed DTO', async () => {
+    const updatedPerson = {
+      id: 'person-1',
+      name: '홍길동',
+      birthDate: '1990-01-01',
+      isImportant: true,
+      phoneNumber: '010-1234-5678',
+      job: null,
+      company: null,
+      position: null,
+      relationship: null,
+      personality: null,
+      birthdayNotificationEnabled: false,
+      birthdayNotificationOffsetMinutes: 1,
+      profileImageFile: null,
+      extraContacts: [],
+      businessCards: [],
+    };
+    prisma.person.findFirst
+      .mockResolvedValueOnce({
+        id: 'person-1',
+        phoneNumber: '010-1234-5678',
+        birthdayNotificationEnabled: false,
+        birthdayNotificationOffsetMinutes: 1,
+      })
+      .mockResolvedValueOnce(updatedPerson);
+
+    const dto = plainToInstance(UpdatePersonItemDto, { isImportant: true });
+
+    await service.updatePerson('user-1', 'person-1', dto);
+
+    expect(prisma.person.update).toHaveBeenCalledWith({
+      where: {
+        id_userId: {
+          id: 'person-1',
+          userId: 'user-1',
+        },
+      },
+      data: {
+        isImportant: true,
+      },
+    });
   });
 
   it('replaces extra contacts only when extraContacts is present', async () => {
