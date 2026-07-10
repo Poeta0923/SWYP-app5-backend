@@ -1,8 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type {
-  MyPageResponse,
-  MyPageUserResponse,
-} from '../users.service';
+import type { MyPageResponse, MyPageUserResponse } from '../users.service';
 
 export class MyPageUserEntity implements MyPageUserResponse {
   @ApiProperty({
