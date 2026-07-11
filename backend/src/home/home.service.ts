@@ -19,6 +19,7 @@ export interface HomeScheduleResponse {
 export interface HomeImportantPersonResponse {
   id: string;
   name: string;
+  phoneNumber: string;
   isImportant: boolean;
   job: string | null;
   company: string | null;
@@ -107,6 +108,7 @@ export class HomeService {
       select: {
         id: true,
         name: true,
+        phoneNumber: true,
         isImportant: true,
         job: true,
         company: true,
@@ -125,6 +127,7 @@ export class HomeService {
     return people.map(({ profileImageFile, ...person }) => ({
       ...person,
       name: this.piiCryptoService.decrypt(person.name),
+      phoneNumber: this.piiCryptoService.decrypt(person.phoneNumber),
       image: this.toSignedImageUrl(profileImageFile),
     }));
   }
