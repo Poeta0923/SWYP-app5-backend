@@ -28,6 +28,9 @@ FROM base AS runner
 
 ENV NODE_ENV=production
 
+# 음성 STT 전 오디오 다운샘플(16kHz mono)에 ffmpeg를 런타임에 사용한다.
+RUN apk add --no-cache ffmpeg
+
 # prisma CLI가 devDependency라 prod 설치에서 누락되므로, entrypoint의
 # migrate deploy를 위해 deps의 node_modules를 통째로 가져온다.
 COPY --from=deps /app/node_modules ./node_modules

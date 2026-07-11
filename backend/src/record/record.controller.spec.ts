@@ -12,6 +12,7 @@ import { UpdateTextRecordDto } from './dto/update-text-record.dto';
 import { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
 import { RecordController } from './record.controller';
 import { RecordService } from './record.service';
+import { VoiceSttJobService } from './voice-stt-job.service';
 
 describe('RecordController', () => {
   let recordService: {
@@ -22,6 +23,10 @@ describe('RecordController', () => {
     getVoiceRecord: jest.Mock;
     updateVoiceRecord: jest.Mock;
     deleteRecord: jest.Mock;
+  };
+  let voiceSttJobService: {
+    createAndStart: jest.Mock;
+    getStatus: jest.Mock;
   };
   let controller: RecordController;
 
@@ -35,8 +40,17 @@ describe('RecordController', () => {
       updateVoiceRecord: jest.fn().mockResolvedValue({}),
       deleteRecord: jest.fn().mockResolvedValue({ success: true }),
     };
+    voiceSttJobService = {
+      createAndStart: jest.fn().mockResolvedValue({ jobId: 'job-1' }),
+      getStatus: jest.fn().mockResolvedValue({
+        status: 'STT_PROCESSING',
+        recordId: null,
+        errorCode: null,
+      }),
+    };
     controller = new RecordController(
       recordService as unknown as RecordService,
+      voiceSttJobService as unknown as VoiceSttJobService,
     );
   });
 
@@ -270,6 +284,77 @@ describe('RecordController', () => {
     expect(recordService.deleteRecord).toHaveBeenCalledWith(
       'user-1',
       'record-1',
+    );
+  });
+
+  it('registers POST /record/voice/stt behind auth and required agreements guards', async () => {
+    const createVoiceSttJobHandler = Object.getOwnPropertyDescriptor(
+      RecordController.prototype,
+      'createVoiceSttJob',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+    const voiceFile = {
+      buffer: Buffer.from('audio'),
+      mimetype: 'audio/m4a',
+      originalname: 'recording.m4a',
+      size: 5,
+    };
+
+    await expect(
+      controller.createVoiceSttJob(currentUser, voiceFile, ' 메모 '),
+    ).resolves.toEqual({ jobId: 'job-1' });
+
+    expect(Reflect.getMetadata(PATH_METADATA, createVoiceSttJobHandler)).toBe(
+      'voice/stt',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, createVoiceSttJobHandler)).toBe(
+      RequestMethod.POST,
+    );
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, createVoiceSttJobHandler),
+    ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
+    expect(voiceSttJobService.createAndStart).toHaveBeenCalledWith(
+      'user-1',
+      voiceFile,
+      '메모',
+    );
+  });
+
+  it('registers GET /record/voice/status/:jobId behind auth and required agreements guards', async () => {
+    const getVoiceSttJobStatusHandler = Object.getOwnPropertyDescriptor(
+      RecordController.prototype,
+      'getVoiceSttJobStatus',
+    )?.value as object;
+    const currentUser = {
+      sub: 'user-1',
+      familyId: 'family-1',
+      role: 'USER',
+    };
+
+    await expect(
+      controller.getVoiceSttJobStatus(currentUser, 'job-1'),
+    ).resolves.toEqual({
+      status: 'STT_PROCESSING',
+      recordId: null,
+      errorCode: null,
+    });
+
+    expect(
+      Reflect.getMetadata(PATH_METADATA, getVoiceSttJobStatusHandler),
+    ).toBe('voice/status/:jobId');
+    expect(
+      Reflect.getMetadata(METHOD_METADATA, getVoiceSttJobStatusHandler),
+    ).toBe(RequestMethod.GET);
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, getVoiceSttJobStatusHandler),
+    ).toEqual([JwtAuthGuard, RequiredAgreementsGuard]);
+    expect(voiceSttJobService.getStatus).toHaveBeenCalledWith(
+      'user-1',
+      'job-1',
     );
   });
 });

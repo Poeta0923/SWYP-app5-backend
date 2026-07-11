@@ -46,6 +46,7 @@ model User {
   positions             Position[]
   relationships         Relationship[]
   jobs                  Job[]
+  voiceSttJobs          VoiceSttJob[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -298,6 +299,7 @@ model MediaFile {
   businessCardFront BusinessCard? @relation("BusinessCardFrontImage")
   businessCardBack  BusinessCard? @relation("BusinessCardBackImage")
   recordVoice       Record?       @relation("RecordVoiceFile")
+  sttJob            VoiceSttJob?
 
   @@index([userId])
   @@index([userId, usage])
@@ -481,6 +483,7 @@ model Record {
   people               RecordPerson[]
   keywords             RecordKeyword[]
   recordMemo           RecordMemo?
+  sttJob               VoiceSttJob?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -498,6 +501,40 @@ model Record {
 enum RecordType {
   TEXT
   VOICE
+}
+
+/// 음성 기록 STT/요약 비동기 처리 잡. 업로드 요청은 즉시 잡을 만들고 반환하며,
+/// 백그라운드에서 STT → 요약을 처리한 뒤 완료 시점에만 Record를 생성한다.
+/// 클라이언트는 status를 폴링하고, COMPLETED 시 recordId로 상세를 조회한다.
+model VoiceSttJob {
+  id           String            @id @default(cuid())
+  userId       String            @map("user_id")
+  status       VoiceSttJobStatus @default(STT_PROCESSING)
+  voiceFileId  String            @unique @map("voice_file_id")
+  recordId     String?           @map("record_id")
+  // 완료 시점에 RecordMemo로 옮기기 전까지 PII 암호화 상태로 보관한다.
+  recordMemo   String?           @map("record_memo")
+  errorCode    String?           @map("error_code")
+  errorMessage String?           @map("error_message")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voiceFile MediaFile @relation(fields: [voiceFileId], references: [id], onDelete: Cascade)
+  record    Record?   @relation(fields: [recordId, userId], references: [id, userId], onDelete: SetNull)
+
+  @@unique([recordId, userId])
+  @@index([userId])
+  @@index([status])
+  @@map("voice_stt_jobs")
+}
+
+enum VoiceSttJobStatus {
+  STT_PROCESSING
+  SUMMARY_PROCESSING
+  COMPLETED
+  FAILED
 }
 
 model RecordPerson {

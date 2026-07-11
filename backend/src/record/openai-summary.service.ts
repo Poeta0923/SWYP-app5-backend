@@ -5,6 +5,7 @@ import {
   OPENAI_API_KEY_ENV,
   OPENAI_RESPONSES_URL,
   OPENAI_SUMMARY_MODEL_ENV,
+  OPENAI_SUMMARY_TIMEOUT_MS,
 } from './record.constants';
 
 type OpenAIResponseContent = {
@@ -31,7 +32,7 @@ export class OpenAISummaryService {
   constructor(private readonly configService: ConfigService) {}
 
   async summarize(content: string): Promise<OpenAISummaryResult> {
-    const response = await fetch(OPENAI_RESPONSES_URL, {
+    const response = await this.fetchWithTimeout(OPENAI_RESPONSES_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.getRequiredConfig(OPENAI_API_KEY_ENV)}`,
@@ -72,6 +73,32 @@ export class OpenAISummaryService {
     }
 
     return result;
+  }
+
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      OPENAI_SUMMARY_TIMEOUT_MS,
+    );
+
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new BadGatewayException({
+          code: 'OPENAI_SUMMARY_TIMEOUT',
+          message: '기록 내용 요약이 시간 내에 완료되지 않았습니다.',
+        });
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private extractSummaryResult(
