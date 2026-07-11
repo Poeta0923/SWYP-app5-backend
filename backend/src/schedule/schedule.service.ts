@@ -149,9 +149,6 @@ export class ScheduleService {
     const schedules = await this.prisma.schedule.findMany({
       where: {
         userId,
-        scheduleTime: {
-          gte: now,
-        },
       },
       select: {
         id: true,
@@ -175,10 +172,9 @@ export class ScheduleService {
           },
         },
       },
-      orderBy: [
-        { bookMark: Prisma.SortOrder.desc },
-        { scheduleTime: Prisma.SortOrder.asc },
-      ],
+      orderBy: {
+        scheduleTime: Prisma.SortOrder.asc,
+      },
     });
 
     return schedules.map((schedule) => ({
