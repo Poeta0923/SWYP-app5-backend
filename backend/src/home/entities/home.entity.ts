@@ -46,6 +46,12 @@ export class HomeImportantPersonEntity implements HomeImportantPersonResponse {
   name: string;
 
   @ApiProperty({
+    example: '010-1234-5678',
+    description: '전화번호',
+  })
+  phoneNumber: string;
+
+  @ApiProperty({
     example: true,
     description: '중요 인물 여부',
   })
