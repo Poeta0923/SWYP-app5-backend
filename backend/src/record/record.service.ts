@@ -4,21 +4,14 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import {
-  MediaFileType,
-  MediaFileUsage,
-  Prisma,
-  RecordType,
-} from '../../generated/prisma/client';
+import { Prisma, RecordType } from '../../generated/prisma/client';
 import type { HomeRecordResponse } from '../home/home.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PiiCryptoService } from '../privacy/pii-crypto.service';
-import { S3Service, type UploadedS3File } from '../s3/s3.service';
+import { S3Service } from '../s3/s3.service';
 import type { CreateTextRecordDto } from './dto/create-text-record.dto';
 import type { UpdateTextRecordDto } from './dto/update-text-record.dto';
 import type { UpdateVoiceRecordDto } from './dto/update-voice-record.dto';
-import { OpenAISummaryService } from './openai-summary.service';
-import { OpenAITranscriptionService } from './openai-transcription.service';
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -27,10 +20,6 @@ export interface VoiceRecordFile {
   mimetype: string;
   originalname?: string;
   size: number;
-}
-
-export interface VoiceRecordSttResponse {
-  id: string;
 }
 
 export interface TextRecordPersonResponse {
@@ -64,18 +53,6 @@ export interface VoiceRecordScheduleResponse {
   scheduleTime: string;
   dDay: string;
   people: VoiceRecordSchedulePersonResponse[];
-}
-
-export interface VoiceRecordSummaryResponse {
-  recordId: string;
-  title: string;
-  createdAt: string;
-  keyword: string[];
-  content: string;
-  bookMark: boolean;
-  voiceFileUrl: string | null;
-  recordMemo: string | null;
-  schedule: VoiceRecordScheduleResponse | null;
 }
 
 export interface VoiceRecordDetailPersonResponse {
@@ -114,10 +91,6 @@ export interface DeleteRecordResult {
   success: true;
 }
 
-interface UploadedVoiceStorageFile extends UploadedS3File {
-  originalName?: string;
-}
-
 type VoiceRecordScheduleData = {
   id: string;
   title: string;
@@ -136,8 +109,6 @@ export class RecordService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
-    private readonly openAITranscriptionService: OpenAITranscriptionService,
-    private readonly openAISummaryService: OpenAISummaryService,
     @Optional()
     private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
@@ -182,57 +153,6 @@ export class RecordService {
           ? this.toMinuteSecond(record.voiceDurationSeconds)
           : null,
     }));
-  }
-
-  async createVoiceRecordFromStt(
-    userId: string,
-    file: VoiceRecordFile,
-    recordMemo: string | null,
-  ): Promise<VoiceRecordSttResponse> {
-    const uploadedFileKeys: string[] = [];
-
-    try {
-      const uploadedVoiceFile = await this.uploadVoiceFile(
-        userId,
-        file,
-        uploadedFileKeys,
-      );
-      const transcribedText =
-        await this.openAITranscriptionService.transcribe(file);
-
-      const createdRecordId = await this.prisma.$transaction(async (tx) => {
-        const voiceFile = await tx.mediaFile.create({
-          data: this.toVoiceMediaFileCreateData(userId, uploadedVoiceFile),
-        });
-        const record = await tx.record.create({
-          data: {
-            userId,
-            type: RecordType.VOICE,
-            content: this.piiCryptoService.encrypt(transcribedText),
-            voiceFileId: voiceFile.id,
-          },
-        });
-
-        if (recordMemo) {
-          await tx.recordMemo.create({
-            data: {
-              userId,
-              recordId: record.id,
-              content: this.piiCryptoService.encrypt(recordMemo),
-            },
-          });
-        }
-
-        return record.id;
-      });
-
-      return {
-        id: createdRecordId,
-      };
-    } catch (error) {
-      await this.deleteUploadedFiles(uploadedFileKeys);
-      throw error;
-    }
   }
 
   async createTextRecord(
@@ -635,134 +555,6 @@ export class RecordService {
     };
   }
 
-  async summarizeVoiceRecord(
-    userId: string,
-    recordId: string,
-  ): Promise<VoiceRecordSummaryResponse> {
-    const record = await this.prisma.record.findFirst({
-      where: {
-        id: recordId,
-        userId,
-        type: RecordType.VOICE,
-      },
-      select: {
-        id: true,
-        content: true,
-      },
-    });
-
-    if (!record) {
-      throw new NotFoundException({
-        code: 'VOICE_RECORD_NOT_FOUND',
-        message: '요약할 음성 기록을 찾을 수 없습니다.',
-        recordId,
-      });
-    }
-
-    const content = this.piiCryptoService.decrypt(record.content)?.trim();
-
-    if (!content) {
-      throw new BadRequestException({
-        code: 'VOICE_RECORD_CONTENT_EMPTY',
-        message: '요약할 기록 내용이 없습니다.',
-        recordId,
-      });
-    }
-
-    const summaryResult = await this.openAISummaryService.summarize(content);
-
-    const updatedRecord = await this.prisma.$transaction(async (tx) => {
-      await tx.recordKeyword.deleteMany({
-        where: {
-          recordId: record.id,
-          userId,
-        },
-      });
-
-      await tx.recordKeyword.createMany({
-        data: summaryResult.keywords.map((keyword) => ({
-          userId,
-          recordId: record.id,
-          name: keyword,
-        })),
-        skipDuplicates: true,
-      });
-
-      return tx.record.update({
-        where: {
-          id: record.id,
-        },
-        data: {
-          content: this.piiCryptoService.encrypt(summaryResult.summary),
-        },
-        select: {
-          id: true,
-          title: true,
-          createdAt: true,
-          content: true,
-          bookMark: true,
-          keywords: {
-            select: {
-              name: true,
-            },
-            orderBy: {
-              name: 'asc',
-            },
-          },
-          recordMemo: {
-            select: {
-              content: true,
-            },
-          },
-          voiceFile: {
-            select: {
-              s3Key: true,
-            },
-          },
-          schedule: {
-            select: {
-              id: true,
-              title: true,
-              scheduleTime: true,
-              people: {
-                select: {
-                  person: {
-                    select: {
-                      id: true,
-                      name: true,
-                      profileImageFile: {
-                        select: {
-                          s3Key: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-    });
-
-    return {
-      recordId: updatedRecord.id,
-      title: this.piiCryptoService.decrypt(updatedRecord.title),
-      createdAt: updatedRecord.createdAt.toISOString(),
-      keyword: updatedRecord.keywords.map((keyword) => keyword.name),
-      content: this.piiCryptoService.decrypt(updatedRecord.content) ?? '',
-      bookMark: updatedRecord.bookMark,
-      voiceFileUrl: this.toSignedMediaFileUrl(updatedRecord.voiceFile),
-      recordMemo: this.piiCryptoService.decrypt(
-        updatedRecord.recordMemo?.content,
-      ),
-      schedule: this.toVoiceRecordScheduleResponse(
-        updatedRecord.schedule,
-        new Date(),
-      ),
-    };
-  }
-
   async updateVoiceRecord(
     userId: string,
     recordId: string,
@@ -1028,41 +820,6 @@ export class RecordService {
     };
   }
 
-  private async uploadVoiceFile(
-    userId: string,
-    file: VoiceRecordFile,
-    uploadedFileKeys: string[],
-  ): Promise<UploadedVoiceStorageFile> {
-    const uploadedFile = await this.s3Service.uploadFile({
-      body: file.buffer,
-      contentType: file.mimetype,
-      originalName: file.originalname,
-      prefix: `records/${userId}/voice`,
-    });
-    uploadedFileKeys.push(uploadedFile.key);
-
-    return {
-      ...uploadedFile,
-      originalName: file.originalname,
-    };
-  }
-
-  private toVoiceMediaFileCreateData(
-    userId: string,
-    file: UploadedVoiceStorageFile,
-  ) {
-    return {
-      userId,
-      type: MediaFileType.AUDIO,
-      usage: MediaFileUsage.RECORD_VOICE,
-      bucket: file.bucket,
-      s3Key: file.key,
-      contentType: file.contentType,
-      sizeBytes: file.size,
-      originalName: file.originalName,
-    };
-  }
-
   private toMinuteSecond(seconds: number | null): string | null {
     if (seconds === null) {
       return null;
@@ -1264,13 +1021,5 @@ export class RecordService {
       Object.hasOwn(object, key) &&
       (object as Record<PropertyKey, unknown>)[key] !== undefined
     );
-  }
-
-  private async deleteUploadedFiles(keys: string[]): Promise<void> {
-    if (keys.length === 0) {
-      return;
-    }
-
-    await this.s3Service.deleteFiles(keys).catch(() => undefined);
   }
 }

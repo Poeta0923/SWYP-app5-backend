@@ -13,7 +13,6 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiBadGatewayResponse,
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
@@ -40,14 +39,15 @@ import {
   TextRecordEntity,
 } from './entities/text-record.entity';
 import { VoiceRecordDetailEntity } from './entities/voice-record-detail.entity';
-import { VoiceRecordSummaryEntity } from './entities/voice-record-summary.entity';
 import { VoiceRecordSttEntity } from './entities/voice-record-stt.entity';
+import { VoiceSttJobStatusEntity } from './entities/voice-stt-job-status.entity';
 import {
   RECORD_MEMO_MAX_LENGTH,
   RECORD_VOICE_FILE_FIELD_NAME,
   RECORD_VOICE_FILE_SIZE_LIMIT_BYTES,
 } from './record.constants';
 import { RecordService, type VoiceRecordFile } from './record.service';
+import { VoiceSttJobService } from './voice-stt-job.service';
 
 const RECORD_VOICE_FILE_EXTENSIONS = new Set(['.m4a']);
 const RECORD_VOICE_FILE_CONTENT_TYPES = new Set([
@@ -60,7 +60,10 @@ const RECORD_VOICE_FILE_CONTENT_TYPES = new Set([
 @ApiTags('record')
 @Controller('record')
 export class RecordController {
-  constructor(private readonly recordService: RecordService) {}
+  constructor(
+    private readonly recordService: RecordService,
+    private readonly voiceSttJobService: VoiceSttJobService,
+  ) {}
 
   @Get()
   @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
@@ -107,14 +110,16 @@ export class RecordController {
   )
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '음성 기록 STT 생성',
+    summary: '음성 기록 STT 잡 생성',
     description:
-      'm4a 음성 파일을 S3에 저장하고 OpenAI STT로 변환한 텍스트를 기록 content에 저장합니다.',
+      'm4a 음성 파일을 S3에 저장하고 STT 처리 잡을 생성한 뒤 즉시 jobId를 반환합니다. ' +
+      '전사와 요약은 백그라운드로 처리되며, 클라이언트는 GET /record/voice/status/{jobId}로 상태를 폴링하고 ' +
+      'COMPLETED 시 recordId로 상세를 조회합니다.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateVoiceRecordSttMultipartDto })
   @ApiCreatedResponse({
-    description: '음성 기록 STT 생성 성공',
+    description: '음성 STT 잡 생성 성공',
     type: VoiceRecordSttEntity,
   })
   @ApiBadRequestResponse({
@@ -126,10 +131,7 @@ export class RecordController {
   @ApiForbiddenResponse({
     description: '필수 약관 미동의',
   })
-  @ApiBadGatewayResponse({
-    description: 'OpenAI STT 처리 실패',
-  })
-  createVoiceRecordFromStt(
+  createVoiceSttJob(
     @CurrentUser() currentUser: JwtAccessPayload,
     @UploadedFile() voiceFile: VoiceRecordFile | undefined,
     @Body('recordMemo') recordMemo: string | undefined,
@@ -149,11 +151,39 @@ export class RecordController {
       );
     }
 
-    return this.recordService.createVoiceRecordFromStt(
+    return this.voiceSttJobService.createAndStart(
       currentUser.sub,
       voiceFile,
       trimmedRecordMemo || null,
     );
+  }
+
+  @Get('voice/status/:jobId')
+  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '음성 STT 잡 상태 조회',
+    description:
+      '음성 STT 처리 잡의 상태를 조회합니다. COMPLETED면 recordId로 상세 조회, FAILED면 errorCode로 원인을 확인합니다.',
+  })
+  @ApiOkResponse({
+    description: '음성 STT 잡 상태 조회 성공',
+    type: VoiceSttJobStatusEntity,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Access token 검증 실패 또는 세션 만료',
+  })
+  @ApiForbiddenResponse({
+    description: '필수 약관 미동의',
+  })
+  @ApiNotFoundResponse({
+    description: '음성 STT 잡을 찾을 수 없음',
+  })
+  getVoiceSttJobStatus(
+    @CurrentUser() currentUser: JwtAccessPayload,
+    @Param('jobId') jobId: string,
+  ) {
+    return this.voiceSttJobService.getStatus(currentUser.sub, jobId);
   }
 
   @Post('text')
@@ -271,40 +301,6 @@ export class RecordController {
     @Param('recordId') recordId: string,
   ) {
     return this.recordService.getVoiceRecord(currentUser.sub, recordId);
-  }
-
-  @Get('voice/summary/:recordId')
-  @UseGuards(JwtAuthGuard, RequiredAgreementsGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: '음성 기록 내용 요약',
-    description:
-      '음성 기록 content를 OpenAI API로 요약하고, 요약 결과로 기존 content를 덮어쓴 뒤 연결 일정 정보를 함께 반환합니다.',
-  })
-  @ApiOkResponse({
-    description: '음성 기록 요약 성공',
-    type: VoiceRecordSummaryEntity,
-  })
-  @ApiBadRequestResponse({
-    description: '요약할 content가 비어 있음',
-  })
-  @ApiUnauthorizedResponse({
-    description: 'Access token 검증 실패 또는 세션 만료',
-  })
-  @ApiForbiddenResponse({
-    description: '필수 약관 미동의',
-  })
-  @ApiNotFoundResponse({
-    description: '음성 기록을 찾을 수 없음',
-  })
-  @ApiBadGatewayResponse({
-    description: 'OpenAI 요약 처리 실패',
-  })
-  summarizeVoiceRecord(
-    @CurrentUser() currentUser: JwtAccessPayload,
-    @Param('recordId') recordId: string,
-  ) {
-    return this.recordService.summarizeVoiceRecord(currentUser.sub, recordId);
   }
 
   @Patch('voice/:recordId')

@@ -5,6 +5,7 @@ import {
   OPENAI_API_KEY_ENV,
   OPENAI_AUDIO_TRANSCRIPTIONS_URL,
   OPENAI_TRANSCRIPTION_MODEL_ENV,
+  OPENAI_TRANSCRIPTION_TIMEOUT_MS,
 } from './record.constants';
 
 export interface TranscriptionAudioFile {
@@ -18,13 +19,16 @@ export class OpenAITranscriptionService {
   constructor(private readonly configService: ConfigService) {}
 
   async transcribe(file: TranscriptionAudioFile): Promise<string> {
-    const response = await fetch(OPENAI_AUDIO_TRANSCRIPTIONS_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.getRequiredConfig(OPENAI_API_KEY_ENV)}`,
+    const response = await this.fetchWithTimeout(
+      OPENAI_AUDIO_TRANSCRIPTIONS_URL,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.getRequiredConfig(OPENAI_API_KEY_ENV)}`,
+        },
+        body: this.createTranscriptionFormData(file),
       },
-      body: this.createTranscriptionFormData(file),
-    });
+    );
 
     if (!response.ok) {
       throw new BadGatewayException({
@@ -46,6 +50,32 @@ export class OpenAITranscriptionService {
     }
 
     return text;
+  }
+
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      OPENAI_TRANSCRIPTION_TIMEOUT_MS,
+    );
+
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new BadGatewayException({
+          code: 'OPENAI_TRANSCRIPTION_TIMEOUT',
+          message: '음성 파일 텍스트 변환이 시간 내에 완료되지 않았습니다.',
+        });
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private createTranscriptionFormData(file: TranscriptionAudioFile): FormData {
