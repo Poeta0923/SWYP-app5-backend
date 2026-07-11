@@ -65,6 +65,21 @@ enum UserPlan {
   Premium
 }
 
+/// 요금제 카탈로그. code(UserPlan)로 User.plan과 연결된다.
+/// 인물 수/용량/청구액만 정형 컬럼으로 저장하고, 화자분리 같은 부가 혜택 문구는
+/// 표시용이라 DB에 두지 않고 서비스에서 응답 시 붙인다.
+model Plan {
+  code           UserPlan @id
+  maxPeople      Int?     @map("max_people") // NULL = 무제한
+  storageLimitMb Int      @map("storage_limit_mb") // 클라우드 용량, MB 단위
+  priceMonthly   Int      @map("price_monthly") // 월 청구액, 원 단위 (0 = 무료)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("plans")
+}
+
 model AgreementDocument {
   id          String               @id @default(cuid())
   type        AgreementType
