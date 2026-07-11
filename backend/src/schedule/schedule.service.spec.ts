@@ -704,9 +704,6 @@ describe('ScheduleService', () => {
     expect(prisma.schedule.findMany).toHaveBeenCalledWith({
       where: {
         userId: 'user-1',
-        scheduleTime: {
-          gte: new Date('2026-06-29T01:00:00.000Z'),
-        },
       },
       select: {
         id: true,
@@ -735,10 +732,9 @@ describe('ScheduleService', () => {
           },
         },
       },
-      orderBy: [
-        { bookMark: Prisma.SortOrder.desc },
-        { scheduleTime: Prisma.SortOrder.asc },
-      ],
+      orderBy: {
+        scheduleTime: Prisma.SortOrder.asc,
+      },
     });
     expect(s3Service.getSignedUrl).toHaveBeenCalledWith('profiles/profile.png');
   });

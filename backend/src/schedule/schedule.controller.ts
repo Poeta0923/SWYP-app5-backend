@@ -73,7 +73,7 @@ export class ScheduleController {
   @ApiOperation({
     summary: '일정 목록 조회',
     description:
-      '현재 사용자의 다가오는 일정 목록을 일정 시작 시각 오름차순으로 조회합니다.',
+      '현재 사용자의 전체 일정 목록을 일정 시작 시각 오름차순으로 조회합니다.',
   })
   @ApiOkResponse({
     description: '일정 목록 조회 성공',
