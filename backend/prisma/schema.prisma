@@ -522,7 +522,7 @@ model VoiceSttJob {
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   voiceFile MediaFile @relation(fields: [voiceFileId], references: [id], onDelete: Cascade)
-  record    Record?   @relation(fields: [recordId, userId], references: [id, userId], onDelete: SetNull)
+  record    Record?   @relation(fields: [recordId, userId], references: [id, userId], onDelete: Cascade)
 
   @@unique([recordId, userId])
   @@index([userId])
