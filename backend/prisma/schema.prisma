@@ -17,36 +17,37 @@ datasource db {
 }
 
 model User {
-  id                    String               @id @default(cuid())
-  name                  String
-  image                 String?
-  email                 String?
-  emailHash             String?              @unique @map("email_hash")
-  plan                  UserPlan             @default(Basic)
-  role                  Role                 @default(USER)
-  activeRefreshFamilyId String?              @map("active_refresh_family_id")
-  accounts              Account[]
-  refreshTokens         RefreshToken[]
-  agreements            UserAgreement[]
-  agreementEvents       UserAgreementEvent[]
-  people                Person[]
-  businessCards         BusinessCard[]
-  extraContacts         ExtraContact[]
-  records               Record[]
-  mediaFiles            MediaFile[]
-  schedules             Schedule[]
-  pushTokens            PushToken[]
-  notificationJobs      NotificationJob[]
-  notifications         Notification[]
-  schedulePeople        SchedulePerson[]
-  recordPeople          RecordPerson[]
-  recordKeywords        RecordKeyword[]
-  companies             Company[]
-  recordMemos           RecordMemo[]
-  positions             Position[]
-  relationships         Relationship[]
-  jobs                  Job[]
-  voiceSttJobs          VoiceSttJob[]
+  id                      String                   @id @default(cuid())
+  name                    String
+  image                   String?
+  email                   String?
+  emailHash               String?                  @unique @map("email_hash")
+  plan                    UserPlan                 @default(Basic)
+  role                    Role                     @default(USER)
+  activeRefreshFamilyId   String?                  @map("active_refresh_family_id")
+  accounts                Account[]
+  refreshTokens           RefreshToken[]
+  agreements              UserAgreement[]
+  agreementEvents         UserAgreementEvent[]
+  people                  Person[]
+  businessCards           BusinessCard[]
+  extraContacts           ExtraContact[]
+  records                 Record[]
+  mediaFiles              MediaFile[]
+  schedules               Schedule[]
+  pushTokens              PushToken[]
+  notificationJobs        NotificationJob[]
+  notifications           Notification[]
+  schedulePeople          SchedulePerson[]
+  recordPeople            RecordPerson[]
+  recordKeywords          RecordKeyword[]
+  companies               Company[]
+  recordMemos             RecordMemo[]
+  positions               Position[]
+  relationships           Relationship[]
+  jobs                    Job[]
+  voiceSttJobs            VoiceSttJob[]
+  googlePlaySubscriptions GooglePlaySubscription[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -69,15 +70,132 @@ enum UserPlan {
 /// 인물 수/용량/청구액만 정형 컬럼으로 저장하고, 화자분리 같은 부가 혜택 문구는
 /// 표시용이라 DB에 두지 않고 서비스에서 응답 시 붙인다.
 model Plan {
-  code           UserPlan @id
-  maxPeople      Int?     @map("max_people") // NULL = 무제한
-  storageLimitMb Int      @map("storage_limit_mb") // 클라우드 용량, MB 단위
-  priceMonthly   Int      @map("price_monthly") // 월 청구액, 원 단위 (0 = 무료)
+  code               UserPlan            @id
+  maxPeople          Int?                @map("max_people") // NULL = 무제한
+  storageLimitMb     Int                 @map("storage_limit_mb") // 클라우드 용량, MB 단위
+  priceMonthly       Int                 @map("price_monthly") // 월 청구액, 원 단위 (0 = 무료)
+  googlePlayProducts GooglePlayProduct[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("plans")
+}
+
+model GooglePlayProduct {
+  id          String   @id @default(cuid())
+  productId   String   @unique @map("product_id")
+  planCode    UserPlan @map("plan_code")
+  packageName String   @map("package_name")
+  active      Boolean  @default(true)
+
+  plan          Plan                     @relation(fields: [planCode], references: [code], onDelete: Restrict)
+  subscriptions GooglePlaySubscription[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([planCode])
+  @@map("google_play_products")
+}
+
+model GooglePlaySubscription {
+  id                  String                   @id @default(cuid())
+  userId              String                   @map("user_id")
+  productId           String                   @map("product_id")
+  purchaseToken       String                   @unique @map("purchase_token")
+  status              GoogleSubscriptionStatus
+  linkedPurchaseToken String?                  @map("linked_purchase_token")
+  startedAt           DateTime?                @map("started_at")
+  expiresAt           DateTime?                @map("expires_at")
+  autoRenewEnabled    Boolean                  @default(false) @map("auto_renew_enabled")
+  acknowledged        Boolean                  @default(false)
+  testPurchase        Boolean                  @default(false) @map("test_purchase")
+  lastVerifiedAt      DateTime                 @default(now()) @map("last_verified_at")
+  rawResponse         Json?                    @map("raw_response")
+
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product      GooglePlayProduct       @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  transactions GooglePlayTransaction[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@index([linkedPurchaseToken])
+  @@map("google_play_subscriptions")
+}
+
+enum GoogleSubscriptionStatus {
+  PENDING
+  ACTIVE
+  CANCELED
+  GRACE_PERIOD
+  ON_HOLD
+  PAUSED
+  EXPIRED
+  REVOKED
+  UNKNOWN
+}
+
+model GooglePlayRtdnEvent {
+  id               String          @id @default(cuid())
+  messageId        String          @unique @map("message_id")
+  packageName      String?         @map("package_name")
+  purchaseToken    String?         @map("purchase_token")
+  notificationType Int?            @map("notification_type")
+  eventTime        DateTime?       @map("event_time")
+  status           RtdnEventStatus @default(RECEIVED)
+  payload          Json
+  errorMessage     String?         @map("error_message")
+  processedAt      DateTime?       @map("processed_at")
+  retryCount       Int             @default(0) @map("retry_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([purchaseToken])
+  @@index([status, createdAt])
+  @@map("google_play_rtdn_events")
+}
+
+enum RtdnEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model GooglePlayTransaction {
+  id             String                  @id @default(cuid())
+  subscriptionId String                  @map("subscription_id")
+  orderId        String                  @unique @map("order_id")
+  status         GoogleTransactionStatus
+  purchasedAt    DateTime?               @map("purchased_at")
+  expiresAt      DateTime?               @map("expires_at")
+  amountMicros   BigInt?                 @map("amount_micros")
+  currencyCode   String?                 @map("currency_code")
+  rawResponse    Json?                   @map("raw_response")
+
+  subscription GooglePlaySubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([subscriptionId, purchasedAt])
+  @@map("google_play_transactions")
+}
+
+enum GoogleTransactionStatus {
+  PENDING
+  PAID
+  REFUNDED
+  PARTIALLY_REFUNDED
+  REVOKED
+  FAILED
+  UNKNOWN
 }
 
 model AgreementDocument {
