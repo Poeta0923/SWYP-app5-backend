@@ -13,3 +13,12 @@ export const ANDROID_PUBLISHER_API_BASE =
 
 // 외부 호출 타임아웃(ms).
 export const GOOGLE_PLAY_API_TIMEOUT_MS = 10_000;
+
+// RTDN 웹훅 인증용 시크릿 env 키. Pub/Sub push URL의 ?token= 값과 대조한다.
+export const GOOGLE_PLAY_RTDN_SECRET_ENV = 'GOOGLE_PLAY_RTDN_SECRET';
+
+// RTDN 이벤트 워커가 한 번에 처리하는 배치 크기.
+export const RTDN_EVENT_BATCH_SIZE = 20;
+
+// RTDN 이벤트 처리 실패 시 재시도 상한. 초과하면 더 이상 폴링 대상으로 잡지 않는다.
+export const RTDN_MAX_RETRY = 5;
