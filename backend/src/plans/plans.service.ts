@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UserPlan } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PLAN_ORDER } from './plan-order';
 
 // 요금제별 부가 혜택 문구. 인물 수/용량/청구액과 달리 정형화하지 않고 표시용 텍스트로만 노출한다.
 const PLAN_FEATURES: Record<UserPlan, string[]> = {
@@ -12,9 +13,6 @@ const PLAN_FEATURES: Record<UserPlan, string[]> = {
     '공유 링크 생성 (URL)',
   ],
 };
-
-// 응답에 노출할 요금제 순서(무료 → 유료 상위). DB 조회 순서에 의존하지 않는다.
-const PLAN_ORDER: UserPlan[] = [UserPlan.Basic, UserPlan.Pro, UserPlan.Premium];
 
 export type PlanDetail = Record<string, string>;
 

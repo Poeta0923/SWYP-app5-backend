@@ -17,6 +17,7 @@ import { ScheduleModule } from './schedule/schedule.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrivacyModule } from './privacy/privacy.module';
 import { PlansModule } from './plans/plans.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PlansModule } from './plans/plans.module';
     ScheduleModule,
     NotificationsModule,
     PlansModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
