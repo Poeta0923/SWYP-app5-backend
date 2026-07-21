@@ -22,3 +22,6 @@ export const RTDN_EVENT_BATCH_SIZE = 20;
 
 // RTDN 이벤트 처리 실패 시 재시도 상한. 초과하면 더 이상 폴링 대상으로 잡지 않는다.
 export const RTDN_MAX_RETRY = 5;
+
+// 만료 스윕이 한 번에 처리하는 구독 배치 크기.
+export const EXPIRY_SWEEP_BATCH_SIZE = 100;

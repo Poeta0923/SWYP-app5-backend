@@ -15,7 +15,7 @@ export interface ResolvableSubscription {
 
 // 권한을 유지하는 구독 상태(Google Play 정책 기준). 이 상태이면서 아직 만료 전인 구독만
 // 유료 플랜을 부여한다. ON_HOLD·PAUSED 등은 구글이 접근을 차단하므로 제외한다.
-const ENTITLED_STATUSES: GoogleSubscriptionStatus[] = [
+export const ENTITLED_STATUSES: GoogleSubscriptionStatus[] = [
   GoogleSubscriptionStatus.ACTIVE,
   GoogleSubscriptionStatus.GRACE_PERIOD,
   GoogleSubscriptionStatus.CANCELED,

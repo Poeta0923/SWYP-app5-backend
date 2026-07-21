@@ -8,6 +8,7 @@ import { GooglePlayRtdnSecretGuard } from './google-play-rtdn-secret.guard';
 import { GooglePlayRtdnService } from './google-play-rtdn.service';
 import { GooglePlayRtdnWorkerService } from './google-play-rtdn-worker.service';
 import { PlanResolutionService } from './plan-resolution.service';
+import { SubscriptionExpirySweepService } from './subscription-expiry-sweep.service';
 
 // 구글 인앱 결제(구독) 도메인. PrismaModule은 @Global이라 별도 import 불필요.
 // @Cron 워커는 NotificationsModule의 ScheduleModule.forRoot()가 앱 전역 스캔하므로
@@ -22,6 +23,7 @@ import { PlanResolutionService } from './plan-resolution.service';
     GooglePlayRtdnService,
     GooglePlayRtdnWorkerService,
     GooglePlayRtdnSecretGuard,
+    SubscriptionExpirySweepService,
   ],
   exports: [PlanResolutionService],
 })
