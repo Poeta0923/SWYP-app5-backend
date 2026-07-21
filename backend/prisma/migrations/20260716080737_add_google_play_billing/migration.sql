@@ -121,3 +121,10 @@ ALTER TABLE "google_play_subscriptions" ADD CONSTRAINT "google_play_subscription
 
 -- AddForeignKey
 ALTER TABLE "google_play_transactions" ADD CONSTRAINT "google_play_transactions_subscription_id_fkey" FOREIGN KEY ("subscription_id") REFERENCES "google_play_subscriptions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- 구글 플레이 인앱 상품 카탈로그 시드. Basic은 무료라 상품 없음.
+-- product_id는 Play Console 구독 상품 ID와 동일해야 검증/RTDN이 매칭된다.
+INSERT INTO "google_play_products" ("id", "product_id", "plan_code", "package_name", "updated_at") VALUES
+    (gen_random_uuid()::text, 'pro_monthly',     'Pro',     'app.linker.relation', CURRENT_TIMESTAMP),
+    (gen_random_uuid()::text, 'premium_monthly', 'Premium', 'app.linker.relation', CURRENT_TIMESTAMP)
+ON CONFLICT ("product_id") DO NOTHING;
