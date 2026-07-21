@@ -54,6 +54,44 @@ export class GooglePlayApiClient {
     return (await response.json()) as SubscriptionPurchaseV2;
   }
 
+  /**
+   * 구독 구매를 acknowledge한다. 3일 내 미승인 시 Google이 자동 환불하므로,
+   * 검증으로 권한을 부여한 뒤 반드시 호출해야 한다. 성공 시 204(본문 없음).
+   *
+   * @param packageName 앱 패키지명
+   * @param productId 구독 상품 ID(subscriptions v1 경로에 필요)
+   * @param purchaseToken 구매 토큰
+   * @throws BadGatewayException Google 호출 실패/타임아웃 시
+   */
+  async acknowledgeSubscription(
+    packageName: string,
+    productId: string,
+    purchaseToken: string,
+  ): Promise<void> {
+    const token = await this.getAccessToken();
+    const url =
+      `${ANDROID_PUBLISHER_API_BASE}/applications/${encodeURIComponent(packageName)}` +
+      `/purchases/subscriptions/${encodeURIComponent(productId)}` +
+      `/tokens/${encodeURIComponent(purchaseToken)}:acknowledge`;
+
+    const response = await this.fetchWithTimeout(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+
+    if (!response.ok) {
+      throw new BadGatewayException({
+        code: 'GOOGLE_PLAY_ACKNOWLEDGE_FAILED',
+        message: '구글 플레이 구매 승인에 실패했습니다.',
+        statusCode: response.status,
+      });
+    }
+  }
+
   /** 서비스 계정으로 androidpublisher access token을 발급한다. */
   private async getAccessToken(): Promise<string> {
     const token = await this.getAuth().getAccessToken();

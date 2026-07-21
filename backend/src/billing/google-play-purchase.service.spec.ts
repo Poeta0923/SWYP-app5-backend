@@ -11,27 +11,47 @@ import { PlanResolutionService } from './plan-resolution.service';
 
 interface PrismaMock {
   googlePlayProduct: { findUnique: jest.Mock };
-  googlePlaySubscription: { findUnique: jest.Mock; upsert: jest.Mock };
+  googlePlaySubscription: {
+    findUnique: jest.Mock;
+    upsert: jest.Mock;
+    update: jest.Mock;
+  };
 }
 
 describe('GooglePlayPurchaseService', () => {
   let prisma: PrismaMock;
-  let apiClient: { getSubscription: jest.Mock };
+  let apiClient: {
+    getSubscription: jest.Mock;
+    acknowledgeSubscription: jest.Mock;
+  };
   let planResolution: { syncUserPlan: jest.Mock };
   let service: GooglePlayPurchaseService;
 
   const dto = { productId: 'pro_monthly', purchaseToken: 'token-abc' };
+  // acknowledgementState가 없으므로 mapped.acknowledged = false
   const activeResponse: SubscriptionPurchaseV2 = {
     subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
     lineItems: [{ expiryTime: '2026-08-01T00:00:00Z' }],
+  };
+  const activeProduct = {
+    productId: 'pro_monthly',
+    packageName: 'app.linker.relation',
+    active: true,
   };
 
   beforeEach(() => {
     prisma = {
       googlePlayProduct: { findUnique: jest.fn() },
-      googlePlaySubscription: { findUnique: jest.fn(), upsert: jest.fn() },
+      googlePlaySubscription: {
+        findUnique: jest.fn(),
+        upsert: jest.fn(),
+        update: jest.fn(),
+      },
     };
-    apiClient = { getSubscription: jest.fn() };
+    apiClient = {
+      getSubscription: jest.fn(),
+      acknowledgeSubscription: jest.fn(),
+    };
     planResolution = { syncUserPlan: jest.fn() };
     service = new GooglePlayPurchaseService(
       prisma as unknown as PrismaService,
@@ -78,11 +98,7 @@ describe('GooglePlayPurchaseService', () => {
   });
 
   it('정상 흐름: Google 검증 → 매핑된 값으로 upsert → syncUserPlan → 결과 반환', async () => {
-    prisma.googlePlayProduct.findUnique.mockResolvedValue({
-      productId: 'pro_monthly',
-      packageName: 'app.linker.relation',
-      active: true,
-    });
+    prisma.googlePlayProduct.findUnique.mockResolvedValue(activeProduct);
     prisma.googlePlaySubscription.findUnique.mockResolvedValue(null);
     apiClient.getSubscription.mockResolvedValue(activeResponse);
     prisma.googlePlaySubscription.upsert.mockResolvedValue({});
@@ -113,6 +129,56 @@ describe('GooglePlayPurchaseService', () => {
       status: GoogleSubscriptionStatus.ACTIVE,
       expiresAt: new Date('2026-08-01T00:00:00Z'),
     });
+  });
+
+  it('미승인 구매면 acknowledge 호출 후 acknowledged=true로 갱신', async () => {
+    prisma.googlePlayProduct.findUnique.mockResolvedValue(activeProduct);
+    prisma.googlePlaySubscription.findUnique.mockResolvedValue(null);
+    apiClient.getSubscription.mockResolvedValue(activeResponse);
+    prisma.googlePlaySubscription.upsert.mockResolvedValue({});
+    planResolution.syncUserPlan.mockResolvedValue(UserPlan.Pro);
+
+    await service.verifyPurchase('user-1', dto);
+
+    expect(apiClient.acknowledgeSubscription).toHaveBeenCalledWith(
+      'app.linker.relation',
+      'pro_monthly',
+      'token-abc',
+    );
+    expect(prisma.googlePlaySubscription.update).toHaveBeenCalledWith({
+      where: { purchaseToken: 'token-abc' },
+      data: { acknowledged: true },
+    });
+  });
+
+  it('이미 승인된 구매면 acknowledge 호출 안 함', async () => {
+    prisma.googlePlayProduct.findUnique.mockResolvedValue(activeProduct);
+    prisma.googlePlaySubscription.findUnique.mockResolvedValue(null);
+    apiClient.getSubscription.mockResolvedValue({
+      ...activeResponse,
+      acknowledgementState: 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
+    });
+    prisma.googlePlaySubscription.upsert.mockResolvedValue({});
+    planResolution.syncUserPlan.mockResolvedValue(UserPlan.Pro);
+
+    await service.verifyPurchase('user-1', dto);
+
+    expect(apiClient.acknowledgeSubscription).not.toHaveBeenCalled();
+    expect(prisma.googlePlaySubscription.update).not.toHaveBeenCalled();
+  });
+
+  it('PENDING(결제 대기)이면 acknowledge 호출 안 함', async () => {
+    prisma.googlePlayProduct.findUnique.mockResolvedValue(activeProduct);
+    prisma.googlePlaySubscription.findUnique.mockResolvedValue(null);
+    apiClient.getSubscription.mockResolvedValue({
+      subscriptionState: 'SUBSCRIPTION_STATE_PENDING',
+    });
+    prisma.googlePlaySubscription.upsert.mockResolvedValue({});
+    planResolution.syncUserPlan.mockResolvedValue(UserPlan.Basic);
+
+    await service.verifyPurchase('user-1', dto);
+
+    expect(apiClient.acknowledgeSubscription).not.toHaveBeenCalled();
   });
 
   it('같은 유저가 재검증하면(토큰 소유자 일치) 통과해 upsert된다', async () => {

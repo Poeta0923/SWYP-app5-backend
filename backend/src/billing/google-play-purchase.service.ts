@@ -102,11 +102,32 @@ export class GooglePlayPurchaseService {
       },
     });
 
-    // TODO(6번): 미승인(acknowledged=false)이면 Google acknowledge 호출 (3일 내 미승인 시 자동 환불)
+    // 미승인 구매는 3일 후 자동 환불되므로, 소유가 확정된 상태면 서버에서 acknowledge한다.
+    // PENDING(결제 대기)·UNKNOWN은 아직 승인 대상이 아니라 제외.
+    if (!mapped.acknowledged && isAcknowledgeable(mapped.status)) {
+      await this.apiClient.acknowledgeSubscription(
+        product.packageName,
+        dto.productId,
+        dto.purchaseToken,
+      );
+      await this.prisma.googlePlaySubscription.update({
+        where: { purchaseToken: dto.purchaseToken },
+        data: { acknowledged: true },
+      });
+    }
+
     // TODO: GooglePlayTransaction(orderId, 금액) 기록 — 금액은 별도 소스/ RTDN 필요
 
     const plan = await this.planResolution.syncUserPlan(userId);
 
     return { plan, status: mapped.status, expiresAt: mapped.expiresAt };
   }
+}
+
+/** acknowledge 대상인지. 결제 대기(PENDING)나 상태 불명(UNKNOWN)은 아직 승인하지 않는다. */
+function isAcknowledgeable(status: GoogleSubscriptionStatus): boolean {
+  return (
+    status !== GoogleSubscriptionStatus.PENDING &&
+    status !== GoogleSubscriptionStatus.UNKNOWN
+  );
 }
