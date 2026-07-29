@@ -61,6 +61,11 @@ export interface VoiceRecordDetailPersonResponse {
   image: string | null;
 }
 
+export interface VoiceRecordTranscriptSegmentResponse {
+  speaker: number;
+  text: string;
+}
+
 export interface VoiceRecordDetailResponse {
   recordId: string;
   title: string;
@@ -72,6 +77,8 @@ export interface VoiceRecordDetailResponse {
   recordMemo: string | null;
   voiceFileUrl: string | null;
   schedule: VoiceRecordScheduleResponse | null;
+  // 화자 분리 전사(Premium). Basic/Pro 기록은 빈 배열.
+  transcriptSegments: VoiceRecordTranscriptSegmentResponse[];
 }
 
 export interface VoiceRecordPersonResponse {
@@ -503,6 +510,15 @@ export class RecordService {
             content: true,
           },
         },
+        transcriptSegments: {
+          select: {
+            speaker: true,
+            content: true,
+          },
+          orderBy: {
+            seq: Prisma.SortOrder.asc,
+          },
+        },
         voiceFile: {
           select: {
             s3Key: true,
@@ -552,6 +568,10 @@ export class RecordService {
       recordMemo: this.piiCryptoService.decrypt(record.recordMemo?.content),
       voiceFileUrl: this.toSignedMediaFileUrl(record.voiceFile),
       schedule: this.toVoiceRecordScheduleResponse(record.schedule, new Date()),
+      transcriptSegments: record.transcriptSegments.map((segment) => ({
+        speaker: segment.speaker,
+        text: this.piiCryptoService.decrypt(segment.content) ?? '',
+      })),
     };
   }
 
@@ -685,6 +705,15 @@ export class RecordService {
               content: true,
             },
           },
+          transcriptSegments: {
+            select: {
+              speaker: true,
+              content: true,
+            },
+            orderBy: {
+              seq: Prisma.SortOrder.asc,
+            },
+          },
           voiceFile: {
             select: {
               s3Key: true,
@@ -757,6 +786,10 @@ export class RecordService {
         updatedRecord.schedule,
         new Date(),
       ),
+      transcriptSegments: updatedRecord.transcriptSegments.map((segment) => ({
+        speaker: segment.speaker,
+        text: this.piiCryptoService.decrypt(segment.content) ?? '',
+      })),
     };
   }
 

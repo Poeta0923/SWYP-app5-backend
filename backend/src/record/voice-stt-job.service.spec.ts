@@ -1,10 +1,11 @@
 import { BadGatewayException, NotFoundException } from '@nestjs/common';
-import { VoiceSttJobStatus } from '../../generated/prisma/client';
+import { UserPlan, VoiceSttJobStatus } from '../../generated/prisma/client';
 import { EntitlementService } from '../plans/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service } from '../s3/s3.service';
 import { AudioDownsampleService } from './audio-downsample.service';
+import { GoogleSpeechTranscriptionService } from './google-speech-transcription.service';
 import { OpenAISummaryService } from './openai-summary.service';
 import { OpenAITranscriptionService } from './openai-transcription.service';
 import { VoiceSttJobService } from './voice-stt-job.service';
@@ -14,6 +15,7 @@ const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
 
 interface PrismaMock {
   $transaction: jest.Mock;
+  user: { findUniqueOrThrow: jest.Mock };
   mediaFile: { create: jest.Mock };
   voiceSttJob: {
     create: jest.Mock;
@@ -24,6 +26,7 @@ interface PrismaMock {
   };
   record: { create: jest.Mock };
   recordKeyword: { createMany: jest.Mock };
+  recordTranscriptSegment: { createMany: jest.Mock };
   recordMemo: { create: jest.Mock };
 }
 
@@ -32,6 +35,7 @@ describe('VoiceSttJobService', () => {
   let s3Service: { uploadFile: jest.Mock; deleteFiles: jest.Mock };
   let audioDownsampleService: { downsample: jest.Mock };
   let transcriptionService: { transcribe: jest.Mock };
+  let googleSpeechService: { transcribeWithDiarization: jest.Mock };
   let summaryService: { summarize: jest.Mock };
   let service: VoiceSttJobService;
 
@@ -47,6 +51,12 @@ describe('VoiceSttJobService', () => {
       $transaction: jest.fn((callback: (tx: PrismaMock) => unknown) =>
         callback(prisma),
       ),
+      // 기본은 비-Premium이라 Whisper 경로를 탄다. Premium 테스트에서만 오버라이드.
+      user: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ plan: UserPlan.Basic }),
+      },
       mediaFile: { create: jest.fn().mockResolvedValue({ id: 'media-1' }) },
       voiceSttJob: {
         create: jest.fn().mockResolvedValue({ id: 'job-1' }),
@@ -62,6 +72,7 @@ describe('VoiceSttJobService', () => {
       },
       record: { create: jest.fn().mockResolvedValue({ id: 'record-1' }) },
       recordKeyword: { createMany: jest.fn().mockResolvedValue({}) },
+      recordTranscriptSegment: { createMany: jest.fn().mockResolvedValue({}) },
       recordMemo: { create: jest.fn().mockResolvedValue({}) },
     };
     s3Service = {
@@ -84,6 +95,9 @@ describe('VoiceSttJobService', () => {
     transcriptionService = {
       transcribe: jest.fn().mockResolvedValue('전사된 텍스트'),
     };
+    googleSpeechService = {
+      transcribeWithDiarization: jest.fn(),
+    };
     summaryService = {
       summarize: jest.fn().mockResolvedValue({
         summary: '요약본',
@@ -101,6 +115,7 @@ describe('VoiceSttJobService', () => {
       s3Service as unknown as S3Service,
       audioDownsampleService as unknown as AudioDownsampleService,
       transcriptionService as unknown as OpenAITranscriptionService,
+      googleSpeechService as unknown as GoogleSpeechTranscriptionService,
       summaryService as unknown as OpenAISummaryService,
       {
         assertVoiceStorageAvailable: jest.fn().mockResolvedValue(undefined),
@@ -153,6 +168,51 @@ describe('VoiceSttJobService', () => {
           status: VoiceSttJobStatus.COMPLETED,
           recordId: 'record-1',
         }),
+      }),
+    );
+  });
+
+  it('uses Google STT diarization and stores speaker segments for Premium users', async () => {
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      plan: UserPlan.Premium,
+    });
+    googleSpeechService.transcribeWithDiarization.mockResolvedValue({
+      text: '전체 전사',
+      segments: [
+        { speaker: 1, text: '안녕하세요' },
+        { speaker: 2, text: '반갑습니다' },
+      ],
+    });
+
+    await service.createAndStart('user-1', file, '메모');
+    await flushAsync();
+
+    expect(googleSpeechService.transcribeWithDiarization).toHaveBeenCalledWith(
+      Buffer.from('mp3'),
+    );
+    expect(transcriptionService.transcribe).not.toHaveBeenCalled();
+    // 화자 라벨을 붙인 텍스트를 요약 입력으로 넘긴다.
+    expect(summaryService.summarize).toHaveBeenCalledWith(
+      '화자1: 안녕하세요\n화자2: 반갑습니다',
+    );
+    expect(prisma.recordTranscriptSegment.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          {
+            userId: 'user-1',
+            recordId: 'record-1',
+            seq: 0,
+            speaker: 1,
+            content: 'enc(안녕하세요)',
+          },
+          {
+            userId: 'user-1',
+            recordId: 'record-1',
+            seq: 1,
+            speaker: 2,
+            content: 'enc(반갑습니다)',
+          },
+        ],
       }),
     );
   });

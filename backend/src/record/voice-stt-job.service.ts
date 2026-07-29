@@ -9,6 +9,7 @@ import {
   MediaFileType,
   MediaFileUsage,
   RecordType,
+  UserPlan,
   VoiceSttJobStatus,
 } from '../../generated/prisma/client';
 import { EntitlementService } from '../plans/entitlement.service';
@@ -16,6 +17,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service } from '../s3/s3.service';
 import { AudioDownsampleService } from './audio-downsample.service';
+import {
+  GoogleSpeechTranscriptionService,
+  TranscriptSegment,
+} from './google-speech-transcription.service';
 import { OpenAISummaryService } from './openai-summary.service';
 import { OpenAITranscriptionService } from './openai-transcription.service';
 import type { VoiceRecordFile } from './record.service';
@@ -44,6 +49,7 @@ export class VoiceSttJobService implements OnModuleInit {
     private readonly s3Service: S3Service,
     private readonly audioDownsampleService: AudioDownsampleService,
     private readonly openAITranscriptionService: OpenAITranscriptionService,
+    private readonly googleSpeechTranscriptionService: GoogleSpeechTranscriptionService,
     private readonly openAISummaryService: OpenAISummaryService,
     private readonly entitlementService: EntitlementService,
     @Optional()
@@ -191,16 +197,37 @@ export class VoiceSttJobService implements OnModuleInit {
 
     try {
       const downsampled = await this.audioDownsampleService.downsample(buffer);
-      const transcribedText =
-        await this.openAITranscriptionService.transcribe(downsampled);
+
+      // Premium만 Google STT로 화자 분리 전사한다. Basic/Pro는 기존 Whisper 경로.
+      const { plan } = await this.prisma.user.findUniqueOrThrow({
+        where: { id: job.userId },
+        select: { plan: true },
+      });
+
+      let segments: TranscriptSegment[] = [];
+      let summaryInput: string;
+      if (plan === UserPlan.Premium) {
+        const diarized =
+          await this.googleSpeechTranscriptionService.transcribeWithDiarization(
+            downsampled.buffer,
+          );
+        segments = diarized.segments;
+        // 화자 맥락이 요약에 반영되도록 라벨을 붙여 요약 입력으로 준다.
+        summaryInput =
+          segments.length > 0
+            ? segments.map((s) => `화자${s.speaker}: ${s.text}`).join('\n')
+            : diarized.text;
+      } else {
+        summaryInput =
+          await this.openAITranscriptionService.transcribe(downsampled);
+      }
 
       await this.prisma.voiceSttJob.update({
         where: { id: job.id },
         data: { status: VoiceSttJobStatus.SUMMARY_PROCESSING },
       });
 
-      const summary =
-        await this.openAISummaryService.summarize(transcribedText);
+      const summary = await this.openAISummaryService.summarize(summaryInput);
 
       await this.prisma.$transaction(async (tx) => {
         const record = await tx.record.create({
@@ -221,6 +248,19 @@ export class VoiceSttJobService implements OnModuleInit {
           })),
           skipDuplicates: true,
         });
+
+        // 화자 분리 결과(Premium)가 있으면 발화 순서대로 세그먼트를 저장한다.
+        if (segments.length > 0) {
+          await tx.recordTranscriptSegment.createMany({
+            data: segments.map((seg, index) => ({
+              userId: job.userId,
+              recordId: record.id,
+              seq: index,
+              speaker: seg.speaker,
+              content: this.piiCryptoService.encrypt(seg.text),
+            })),
+          });
+        }
 
         if (job.recordMemo) {
           await tx.recordMemo.create({

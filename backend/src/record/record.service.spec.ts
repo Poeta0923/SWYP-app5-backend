@@ -764,6 +764,7 @@ describe('RecordService', () => {
       recordMemo: {
         content: '요약해 주세요',
       },
+      transcriptSegments: [],
       voiceFile: {
         s3Key: 'records/user-1/voice/recording.m4a',
       },
@@ -937,6 +938,7 @@ describe('RecordService', () => {
         recordMemo: {
           content: '다시 볼 것',
         },
+        transcriptSegments: [],
         voiceFile: {
           s3Key: 'records/user-1/voice/recording.m4a',
         },
@@ -1193,6 +1195,7 @@ describe('RecordService', () => {
         bookMark: false,
         keywords: [],
         recordMemo: null,
+        transcriptSegments: [],
         voiceFile: null,
         people: [],
         schedule: null,
@@ -1217,6 +1220,7 @@ describe('RecordService', () => {
       recordMemo: null,
       voiceFileUrl: null,
       schedule: null,
+      transcriptSegments: [],
     });
 
     expect(prisma.person.findMany).not.toHaveBeenCalled();

@@ -2,8 +2,23 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type {
   VoiceRecordDetailPersonResponse,
   VoiceRecordDetailResponse,
+  VoiceRecordTranscriptSegmentResponse,
 } from '../record.service';
 import { VoiceRecordScheduleEntity } from './voice-record-schedule.entity';
+
+export class VoiceRecordTranscriptSegmentEntity implements VoiceRecordTranscriptSegmentResponse {
+  @ApiProperty({
+    example: 1,
+    description: '화자 태그(1..N). 클라이언트가 "화자 1/2"로 표시',
+  })
+  speaker: number;
+
+  @ApiProperty({
+    example: '안녕하세요, 오늘 미팅 시작하겠습니다.',
+    description: '해당 화자의 발화 텍스트',
+  })
+  text: string;
+}
 
 export class VoiceRecordDetailPersonEntity implements VoiceRecordDetailPersonResponse {
   @ApiProperty({
@@ -93,4 +108,11 @@ export class VoiceRecordDetailEntity implements VoiceRecordDetailResponse {
     nullable: true,
   })
   schedule: VoiceRecordScheduleEntity | null;
+
+  @ApiProperty({
+    type: VoiceRecordTranscriptSegmentEntity,
+    isArray: true,
+    description: '화자 분리 전사(Premium 전용). Basic/Pro 기록은 빈 배열',
+  })
+  transcriptSegments: VoiceRecordTranscriptSegmentEntity[];
 }

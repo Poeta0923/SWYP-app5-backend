@@ -43,6 +43,7 @@ model User {
   recordKeywords          RecordKeyword[]
   companies               Company[]
   recordMemos             RecordMemo[]
+  transcriptSegments      RecordTranscriptSegment[]
   positions               Position[]
   relationships           Relationship[]
   jobs                    Job[]
@@ -617,6 +618,7 @@ model Record {
   keywords             RecordKeyword[]
   recordMemo           RecordMemo?
   sttJob               VoiceSttJob?
+  transcriptSegments   RecordTranscriptSegment[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -715,4 +717,21 @@ model RecordMemo {
   @@index([userId])
   @@index([recordId])
   @@map("record_memos")
+}
+
+/// 화자 분리(Premium) 전사 결과. 발화 순서(seq)대로 화자 태그와 발화 텍스트를 담는다.
+/// content는 PII 암호화 상태로 저장한다. Basic/Pro 기록은 세그먼트가 없다.
+model RecordTranscriptSegment {
+  userId   String @map("user_id")
+  recordId String @map("record_id")
+  seq      Int // 발화 순서(0-base)
+  speaker  Int    @map("speaker_tag") // Google STT speakerTag (1..N)
+  content  String // PII 암호화된 발화 텍스트
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  record Record @relation(fields: [recordId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@id([recordId, seq])
+  @@index([userId])
+  @@map("record_transcript_segments")
 }

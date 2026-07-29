@@ -22,3 +22,18 @@ export const OPENAI_SUMMARY_TIMEOUT_MS = 2 * 60 * 1000;
 // 긴 녹음도 25MB 미만이 되어 분할 없이 한 번의 STT 호출로 처리된다.
 export const AUDIO_DOWNSAMPLE_SAMPLE_RATE = 16000;
 export const AUDIO_DOWNSAMPLE_CHANNELS = 1;
+
+// Google Cloud Speech-to-Text (Premium 화자 분리 전용) 설정.
+export const GOOGLE_CLOUD_PROJECT_ENV = 'GOOGLE_CLOUD_PROJECT';
+export const GOOGLE_CLOUD_CREDENTIALS_JSON_ENV =
+  'GOOGLE_CLOUD_CREDENTIALS_JSON';
+export const GOOGLE_STT_LANGUAGE_CODE = 'ko-KR';
+// latest_long: 긴 오디오·화자 분리에 권장되는 범용 모델.
+export const GOOGLE_STT_MODEL = 'latest_long';
+export const GOOGLE_STT_MIN_SPEAKER_COUNT = 1;
+export const GOOGLE_STT_MAX_SPEAKER_COUNT = 6;
+// longRunningRecognize 인라인 요청 상한(~10MB). 다운샘플 mp3 기준 약 55분 분량이라
+// 실사용 녹음은 다 들어오지만, 초과 시 GCS 없이는 처리할 수 없어 명확히 거부한다.
+export const GOOGLE_STT_MAX_INLINE_BYTES = 10 * 1024 * 1024;
+// LRO 폴링이 무한정 매달리지 않도록 상한을 건다(Whisper 전사와 동일 수준).
+export const GOOGLE_STT_TIMEOUT_MS = 10 * 60 * 1000;
