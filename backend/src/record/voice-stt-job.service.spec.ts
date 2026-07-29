@@ -1,5 +1,6 @@
 import { BadGatewayException, NotFoundException } from '@nestjs/common';
 import { VoiceSttJobStatus } from '../../generated/prisma/client';
+import { EntitlementService } from '../plans/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service } from '../s3/s3.service';
@@ -101,6 +102,10 @@ describe('VoiceSttJobService', () => {
       audioDownsampleService as unknown as AudioDownsampleService,
       transcriptionService as unknown as OpenAITranscriptionService,
       summaryService as unknown as OpenAISummaryService,
+      {
+        assertVoiceStorageAvailable: jest.fn().mockResolvedValue(undefined),
+        assertCanAddPeople: jest.fn().mockResolvedValue(undefined),
+      } as unknown as EntitlementService,
       crypto as unknown as PiiCryptoService,
     );
   });

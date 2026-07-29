@@ -7,6 +7,7 @@ import {
   Prisma,
   RecordType,
 } from '../../generated/prisma/client';
+import { EntitlementService } from '../plans/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 import {
@@ -173,6 +174,10 @@ describe('PeopleService', () => {
     service = new PeopleService(
       prisma as unknown as PrismaService,
       s3Service as unknown as S3Service,
+      {
+        assertCanAddPeople: jest.fn().mockResolvedValue(undefined),
+        assertVoiceStorageAvailable: jest.fn().mockResolvedValue(undefined),
+      } as unknown as EntitlementService,
     );
   });
 

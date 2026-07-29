@@ -12,6 +12,7 @@ import {
   Prisma,
   RecordType,
 } from '../../generated/prisma/client';
+import { EntitlementService } from '../plans/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service, type UploadedS3File } from '../s3/s3.service';
@@ -238,6 +239,7 @@ export class PeopleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
+    private readonly entitlementService: EntitlementService,
     @Optional()
     private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
@@ -247,6 +249,7 @@ export class PeopleService {
     item: CreatePersonItemDto,
     files: PersonCreateFiles,
   ): Promise<CreatedPersonResponse> {
+    await this.entitlementService.assertCanAddPeople(userId, 1);
     await this.assertPhoneNumberIsAvailable(userId, item.phoneNumber);
 
     const uploadedFileKeys: string[] = [];
@@ -345,6 +348,8 @@ export class PeopleService {
     userId: string,
     items: ImportPersonItemDto[],
   ): Promise<ImportedPersonListItemResponse[]> {
+    await this.entitlementService.assertCanAddPeople(userId, items.length);
+
     const people = await this.prisma.person.createManyAndReturn({
       data: items.map((item) => ({
         userId,

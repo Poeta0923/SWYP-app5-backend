@@ -11,6 +11,7 @@ import {
   RecordType,
   VoiceSttJobStatus,
 } from '../../generated/prisma/client';
+import { EntitlementService } from '../plans/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PiiCryptoService } from '../privacy/pii-crypto.service';
 import { S3Service } from '../s3/s3.service';
@@ -44,6 +45,7 @@ export class VoiceSttJobService implements OnModuleInit {
     private readonly audioDownsampleService: AudioDownsampleService,
     private readonly openAITranscriptionService: OpenAITranscriptionService,
     private readonly openAISummaryService: OpenAISummaryService,
+    private readonly entitlementService: EntitlementService,
     @Optional()
     private readonly piiCryptoService: PiiCryptoService = new PiiCryptoService(),
   ) {}
@@ -86,6 +88,12 @@ export class VoiceSttJobService implements OnModuleInit {
     file: VoiceRecordFile,
     recordMemo: string | null,
   ): Promise<VoiceSttJobCreateResponse> {
+    // 업로드 전에 요금제 저장 용량 한도를 검사한다(초과 시 S3에 올리기 전 거부).
+    await this.entitlementService.assertVoiceStorageAvailable(
+      userId,
+      file.size,
+    );
+
     const uploadedFile = await this.s3Service.uploadFile({
       body: file.buffer,
       contentType: file.mimetype,
