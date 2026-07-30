@@ -1,4 +1,7 @@
-import { groupWordsBySpeaker } from './google-speech-transcription.service';
+import {
+  countDistinctSpeakers,
+  groupWordsBySpeaker,
+} from './google-speech-transcription.service';
 
 describe('groupWordsBySpeaker', () => {
   it('groups consecutive words with the same speaker into one segment', () => {
@@ -28,5 +31,35 @@ describe('groupWordsBySpeaker', () => {
 
   it('returns an empty array when there are no words', () => {
     expect(groupWordsBySpeaker([])).toEqual([]);
+  });
+});
+
+describe('countDistinctSpeakers', () => {
+  it('화자 태그가 2명 이상이면 그 수를 센다', () => {
+    expect(
+      countDistinctSpeakers([
+        { speaker: 1, text: 'a' },
+        { speaker: 2, text: 'b' },
+        { speaker: 1, text: 'c' },
+      ]),
+    ).toBe(2);
+  });
+
+  it('화자가 1명뿐이면 1', () => {
+    expect(
+      countDistinctSpeakers([
+        { speaker: 1, text: 'a' },
+        { speaker: 1, text: 'b' },
+      ]),
+    ).toBe(1);
+  });
+
+  it('미태깅(0)은 제외한다', () => {
+    expect(
+      countDistinctSpeakers([
+        { speaker: 0, text: 'a' },
+        { speaker: 0, text: 'b' },
+      ]),
+    ).toBe(0);
   });
 });

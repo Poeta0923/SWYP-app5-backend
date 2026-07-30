@@ -55,6 +55,11 @@ export function groupWordsBySpeaker(words: IWordInfo[]): TranscriptSegment[] {
   return segments.map((s) => ({ speaker: s.speaker, text: s.text.trim() }));
 }
 
+/** 유효한(>0) 화자 태그의 distinct 개수. 화자 분리가 실제로 성립했는지 판정용. */
+export function countDistinctSpeakers(segments: TranscriptSegment[]): number {
+  return new Set(segments.map((s) => s.speaker).filter((tag) => tag > 0)).size;
+}
+
 /**
  * Google Cloud Speech-to-Text로 화자 분리 전사를 수행한다(Premium 전용).
  * longRunningRecognize에 오디오를 인라인(base64)으로 넘겨 GCS 없이 처리한다.
@@ -107,6 +112,10 @@ export class GoogleSpeechTranscriptionService {
       [response] = await this.withTimeout(
         operation.promise(),
         GOOGLE_STT_TIMEOUT_MS,
+        () => {
+          // 타임아웃 시 서버 측 long-running operation을 취소해 과금/리소스 낭비를 막는다.
+          void operation.cancel().catch(() => undefined);
+        },
       );
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
@@ -131,7 +140,12 @@ export class GoogleSpeechTranscriptionService {
       });
     }
 
-    return { text, segments };
+    // 화자가 2명 이상 실제로 구분됐을 때만 세그먼트를 남긴다. 1명(또는 미태깅)이면
+    // 화자 분리 의미가 없어 세그먼트를 생략한다(요약 입력은 전체 전사 text로 대체).
+    const diarizedSegments =
+      countDistinctSpeakers(segments) >= 2 ? segments : [];
+
+    return { text, segments: diarizedSegments };
   }
 
   /** 화자 분리 단어 목록을 담은 result를 뒤에서부터 찾는다(화자 태그는 마지막 result에 온다). */
@@ -162,19 +176,22 @@ export class GoogleSpeechTranscriptionService {
       .trim();
   }
 
-  private async withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    onTimeout?: () => void,
+  ): Promise<T> {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new BadGatewayException({
-              code: 'GOOGLE_STT_TIMEOUT',
-              message: '화자 분리 음성 전사가 시간 내에 완료되지 않았습니다.',
-            }),
-          ),
-        ms,
-      );
+      timer = setTimeout(() => {
+        onTimeout?.();
+        reject(
+          new BadGatewayException({
+            code: 'GOOGLE_STT_TIMEOUT',
+            message: '화자 분리 음성 전사가 시간 내에 완료되지 않았습니다.',
+          }),
+        );
+      }, ms);
     });
 
     try {

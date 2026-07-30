@@ -217,6 +217,35 @@ describe('VoiceSttJobService', () => {
     );
   });
 
+  it('falls back to Whisper and still creates the record when diarization fails (Premium)', async () => {
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      plan: UserPlan.Premium,
+    });
+    googleSpeechService.transcribeWithDiarization.mockRejectedValue(
+      new BadGatewayException({
+        code: 'GOOGLE_STT_TOO_LARGE',
+        message: '용량 초과',
+      }),
+    );
+
+    await service.createAndStart('user-1', file, '메모');
+    await flushAsync();
+
+    // 화자 분리 실패 → Whisper로 폴백
+    expect(transcriptionService.transcribe).toHaveBeenCalled();
+    expect(summaryService.summarize).toHaveBeenCalledWith('전사된 텍스트');
+    // 기록은 정상 생성되고, 세그먼트는 저장하지 않는다.
+    expect(prisma.record.create).toHaveBeenCalled();
+    expect(prisma.recordTranscriptSegment.createMany).not.toHaveBeenCalled();
+    expect(prisma.voiceSttJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: VoiceSttJobStatus.COMPLETED,
+        }),
+      }),
+    );
+  });
+
   it('marks the job FAILED without deleting the uploaded file when the pipeline throws', async () => {
     transcriptionService.transcribe.mockRejectedValue(
       new BadGatewayException({

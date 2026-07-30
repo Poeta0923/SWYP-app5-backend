@@ -207,16 +207,30 @@ export class VoiceSttJobService implements OnModuleInit {
       let segments: TranscriptSegment[] = [];
       let summaryInput: string;
       if (plan === UserPlan.Premium) {
-        const diarized =
-          await this.googleSpeechTranscriptionService.transcribeWithDiarization(
-            downsampled.buffer,
+        try {
+          const diarized =
+            await this.googleSpeechTranscriptionService.transcribeWithDiarization(
+              downsampled.buffer,
+            );
+          segments = diarized.segments;
+          // 화자 맥락이 요약에 반영되도록 라벨을 붙여 요약 입력으로 준다.
+          summaryInput =
+            segments.length > 0
+              ? segments.map((s) => `화자${s.speaker}: ${s.text}`).join('\n')
+              : diarized.text;
+        } catch (error) {
+          // 화자 분리가 실패(용량 초과·타임아웃·STT 오류)해도 기록은 남겨야 하므로
+          // Whisper 전사로 폴백한다(세그먼트 없음). Premium이 Basic보다 나쁜 결과가
+          // 되지 않도록 보장한다.
+          this.logger.warn(
+            `화자 분리 실패로 Whisper 폴백 (jobId=${job.id}): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
           );
-        segments = diarized.segments;
-        // 화자 맥락이 요약에 반영되도록 라벨을 붙여 요약 입력으로 준다.
-        summaryInput =
-          segments.length > 0
-            ? segments.map((s) => `화자${s.speaker}: ${s.text}`).join('\n')
-            : diarized.text;
+          segments = [];
+          summaryInput =
+            await this.openAITranscriptionService.transcribe(downsampled);
+        }
       } else {
         summaryInput =
           await this.openAITranscriptionService.transcribe(downsampled);
